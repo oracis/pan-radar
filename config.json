@@ -1,0 +1,59 @@
+{
+  "config_version": 4,
+  "port": 8931,
+  "cache_ttl": 1800,
+  "request_timeout": 45,
+  "max_concurrency": 6,
+  "max_requests": 14,
+  "auto_degrade": true,
+  "drop_below": 0.34,
+  "cloud_priority": [
+    "quark",
+    "baidu",
+    "aliyun",
+    "uc",
+    "xunlei",
+    "tianyi",
+    "mobile",
+    "115",
+    "123",
+    "pikpak",
+    "guangya"
+  ],
+  "sources": [
+    {
+      "name": "PanSou · so.252035.xyz",
+      "type": "pansou",
+      "search_url": "https://so.252035.xyz/api/search",
+      "enabled": true
+    },
+    {
+      "name": "PanSou · pansou.app",
+      "type": "pansou",
+      "search_url": "https://pansou.app/api/search",
+      "enabled": true
+    },
+    {
+      "name": "混合盘搜索",
+      "type": "disksearch_slim",
+      "search_url": "https://hunhepan.com/open/search/disk",
+      "referer": "https://hunhepan.com/search",
+      "pages": 2,
+      "enabled": true
+    },
+    {
+      "name": "Misoso 夸克搜索",
+      "type": "disksearch",
+      "search_url": "https://www.misoso.cc/v1/search/disk",
+      "referer": "https://www.misoso.cc/search",
+      "origin": "https://www.misoso.cc",
+      "enabled": true
+    },
+    {
+      "name": "自建 PanSou (Docker)",
+      "type": "pansou",
+      "search_url": "http://127.0.0.1:8888/api/search",
+      "enabled": false
+    }
+  ]
+}

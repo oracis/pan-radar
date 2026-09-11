@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 运行产物 / 缓存 / 日志（测试脚本本身以 _*.py 形式留在 data/，属于项目资产）
+data/panradar.db
+data/panradar.db-journal
+data/_*.log
+data/_*.txt
+data/_*.done
+data/_srv.log
+data/probe_*.txt
+data/selftest.txt
+data/http_e2e.txt
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 用户私有配置（如果想 fork 后改）
+config.local.json

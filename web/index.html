@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PanRadar · 网盘资源雷达</title>
+<style>
+  :root{
+    --bg:#0e1015; --panel:#161a22; --panel-2:#1c2130; --line:#272d3b;
+    --text:#e7eaf2; --muted:#8b93a7; --accent:#4f7cff; --accent-2:#7aa2ff;
+    --ok:#2fbf71; --warn:#f0a03c; --err:#e5534b; --radius:12px;
+    --shadow:0 6px 24px rgba(0,0,0,.35);
+  }
+  html[data-theme="light"]{
+    --bg:#f4f6fb; --panel:#ffffff; --panel-2:#f7f9fd; --line:#e2e6f0;
+    --text:#141822; --muted:#6b7488; --accent:#2f5fe0; --accent-2:#4a76ee;
+    --ok:#128a4e; --warn:#a8690c; --err:#c0392b;
+    --shadow:0 6px 20px rgba(20,24,34,.08);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",Roboto,sans-serif}
+  a{color:var(--accent-2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 18px 60px}
+
+  header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .logo{width:34px;height:34px;border-radius:10px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--accent),#8f5cff);
+    display:grid;place-items:center;font-size:18px;box-shadow:var(--shadow)}
+  .brand{font-size:17px;font-weight:650;letter-spacing:.3px}
+  .brand span{color:var(--muted);font-weight:400;font-size:12px;margin-left:8px}
+  .grow{flex:1}
+  .ghost{background:transparent;border:1px solid var(--line);color:var(--muted);
+    padding:6px 11px;border-radius:8px;cursor:pointer;font-size:12.5px}
+  .ghost:hover{color:var(--text);border-color:var(--accent)}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;box-shadow:var(--shadow)}
+  .searchbar{display:flex;gap:10px;flex-wrap:wrap}
+  .field{position:relative;flex:1;min-width:240px}
+  .field.small{flex:0 1 220px;min-width:170px}
+  .field label{position:absolute;top:-8px;left:10px;background:var(--panel);
+    padding:0 5px;font-size:11px;color:var(--muted);border-radius:4px}
+  input[type=text],select{width:100%;background:var(--panel-2);border:1px solid var(--line);
+    color:var(--text);padding:11px 12px;border-radius:9px;font-size:14px;outline:none}
+  input[type=text]:focus,select:focus{border-color:var(--accent);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+  button.primary{background:var(--accent);color:#fff;border:0;padding:11px 22px;
+    border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
+  button.primary:hover{background:var(--accent-2)}
+  button.primary:disabled{opacity:.55;cursor:not-allowed}
+
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+  .row .lbl{font-size:12px;color:var(--muted);margin-right:2px}
+  .chip{border:1px solid var(--line);background:var(--panel-2);color:var(--muted);
+    padding:5px 11px;border-radius:999px;cursor:pointer;font-size:12.5px;user-select:none;
+    transition:.15s}
+  .chip:hover{color:var(--text)}
+  .chip.on{color:#fff;border-color:transparent}
+  .switch{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);cursor:pointer}
+  .switch input{accent-color:var(--accent);width:15px;height:15px}
+
+  .hist{margin-top:12px;display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .hist .h{font-size:12px;color:var(--muted);background:var(--panel-2);
+    border:1px solid var(--line);padding:3px 10px;border-radius:999px;cursor:pointer}
+  .hist .h:hover{color:var(--accent-2);border-color:var(--accent)}
+
+  .status{display:flex;gap:14px;flex-wrap:wrap;align-items:center;
+    margin:16px 2px 10px;font-size:12.5px;color:var(--muted)}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px}
+  .srcstat{display:inline-flex;align-items:center}
+
+  /* 顺藤摸瓜：从已搜到的标题里认出课程名/作者名，点一下换词再搜 */
+  .suggest{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:-2px 0 10px;
+    padding:10px 12px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;font-size:12.5px;color:var(--muted)}
+  .suggest .sg-label{flex:0 0 auto}
+  .suggest .chip{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent) 45%,transparent);
+    font-weight:600}
+  .suggest .chip:hover{color:var(--text);border-color:var(--accent)}
+
+  .group{margin-top:18px}
+  .ghead{display:flex;align-items:center;gap:9px;margin:0 2px 10px;font-size:13.5px;font-weight:600}
+  .ghead .bar{width:3px;height:15px;border-radius:2px}
+  .ghead .n{color:var(--muted);font-weight:400;font-size:12px}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;
+    padding:13px 14px;margin-bottom:9px;display:flex;gap:12px;align-items:flex-start;
+    transition:.15s}
+  .card:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;flex:0 0 auto;
+    background:var(--panel-2);border:1px solid var(--line)}
+  .cbody{flex:1;min-width:0}
+  .title{font-size:14px;font-weight:600;line-height:1.45;word-break:break-word}
+  .meta{margin-top:6px;font-size:11.5px;color:var(--muted);display:flex;gap:10px;
+    flex-wrap:wrap;align-items:center}
+  .pwd{display:inline-block;font-family:ui-monospace,Consolas,monospace;
+    background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn);
+    padding:1px 7px;border-radius:5px;font-size:11.5px}
+  .link{margin-top:7px;font-size:12px;color:var(--accent-2);word-break:break-all;
+    font-family:ui-monospace,Consolas,monospace;opacity:.9}
+  .acts{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+  .btn{border:1px solid var(--line);background:var(--panel-2);color:var(--text);
+    padding:5px 10px;border-radius:7px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--accent);color:var(--accent-2)}
+  .btn.done{color:var(--ok);border-color:var(--ok)}
+
+  /* 质量标签：把「1080P 完结 含源码」这类判断依据直接摆到列表上 */
+  .tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px}
+  .tag{font-size:11px;padding:1px 7px;border-radius:5px;white-space:nowrap;
+    border:1px solid transparent}
+  .tag.good{color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,transparent);
+    border-color:color-mix(in srgb,var(--ok) 34%,transparent)}
+  .tag.info{color:var(--muted);background:var(--panel-2);border-color:var(--line)}
+  .tag.warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent);
+    border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+
+  /* 视图切换：按资源聚合 / 按网盘分组 */
+  .viewbar{gap:6px;align-items:center;margin:0 2px 12px}
+  .viewbar .lbl{font-size:12px;color:var(--muted);margin-right:2px}
+  .vtab{border:1px solid var(--line);background:var(--panel-2);color:var(--muted);
+    padding:4px 12px;border-radius:7px;cursor:pointer;font-size:12.5px}
+  .vtab:hover{color:var(--text)}
+  .vtab.on{background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+
+  /* 跨网盘聚合：一份资源一块，块内列出各网盘入口 */
+  .cluster{background:var(--panel);border:1px solid var(--line);border-radius:11px;
+    padding:13px 14px;margin-bottom:9px;transition:.15s}
+  .cluster:hover{border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+  .chead{display:flex;gap:12px;align-items:flex-start}
+  .ctitle{font-size:14px;font-weight:600;line-height:1.45;word-break:break-word}
+  .cmeta{margin-top:6px;font-size:11.5px;color:var(--muted);display:flex;gap:10px;
+    flex-wrap:wrap;align-items:center}
+  .crows{margin-top:10px;border-top:1px solid var(--line);padding-top:2px}
+  .crow{display:flex;gap:10px;align-items:center;padding:7px 0;flex-wrap:wrap;
+    border-bottom:1px dashed color-mix(in srgb,var(--line) 70%,transparent)}
+  .crow:last-child{border-bottom:0}
+  .crow .cl{flex:0 0 auto;font-size:12.5px;font-weight:600;display:inline-flex;
+    align-items:center;gap:5px;min-width:84px}
+  .crow .cl i{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .crow .cinfo{flex:1;min-width:0;font-size:11.5px;color:var(--muted);display:flex;
+    gap:9px;flex-wrap:wrap;align-items:center}
+  .crow .curl{width:100%;font-size:11.5px;color:var(--accent-2);word-break:break-all;
+    font-family:ui-monospace,Consolas,monospace;opacity:.7;margin-top:3px}
+  .crow .cacts{display:flex;gap:6px;flex:0 0 auto}
+  .pwd{cursor:pointer}
+  .pwd:hover{filter:brightness(1.25)}
+
+  .empty{text-align:center;color:var(--muted);padding:52px 20px;font-size:13.5px}
+  .spinner{width:22px;height:22px;border:2.5px solid var(--line);border-top-color:var(--accent);
+    border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .err{background:color-mix(in srgb,var(--err) 14%,transparent);border:1px solid var(--err);
+    color:var(--err);padding:11px 14px;border-radius:10px;font-size:13px;margin-top:14px}
+  .tips{font-size:11.5px;color:var(--muted);margin-top:10px;text-align:center;line-height:1.7}
+  code{background:var(--panel-2);border:1px solid var(--line);padding:1px 5px;
+    border-radius:4px;font-size:12px}
+  @media (max-width:620px){
+    .field.small{flex:1 1 100%}
+    .acts{flex-direction:row}
+    .thumb{width:46px;height:46px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">🛰️</div>
+    <div class="brand">PanRadar<span>网盘资源雷达 <b id="ver"></b></span></div>
+    <div class="grow"></div>
+    <button class="ghost" id="themeBtn">🌗 主题</button>
+    <button class="ghost" id="clearCache">清缓存</button>
+  </header>
+
+  <div class="panel">
+    <div class="searchbar">
+      <div class="field">
+        <label>课程名 / 资源名 / 作者名</label>
+        <input type="text" id="main" placeholder="例如：Vibe Coding 一人团队项目开发实战">
+      </div>
+      <div class="field small">
+        <label>作者（可选，用于组合精搜）</label>
+        <input type="text" id="author" placeholder="例如：风间影月">
+      </div>
+      <button class="primary" id="go">搜索</button>
+    </div>
+
+    <div class="row">
+      <span class="lbl">网盘：</span>
+      <div id="cloudChips" style="display:flex;gap:7px;flex-wrap:wrap"></div>
+      <button class="ghost" id="onlyMain">只看百度/夸克/阿里</button>
+      <button class="ghost" id="allClouds">全选</button>
+    </div>
+
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="deep"> 深度搜索（更多变体 + 强制刷新累积，稍慢）</label>
+      <span class="lbl" style="margin-left:8px">排序：</span>
+      <select id="sort" style="width:auto;padding:6px 10px">
+        <option value="relevance">相关度优先</option>
+        <option value="time">最新优先</option>
+      </select>
+      <div class="grow"></div>
+      <button class="ghost" id="expMd">导出 Markdown</button>
+      <button class="ghost" id="expCsv">导出 CSV</button>
+    </div>
+
+    <div class="hist" id="hist"></div>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="viewbar" id="viewbar" style="display:none"></div>
+  <div id="results"></div>
+
+  <div class="tips">
+    只聚合各搜索源已公开索引的分享链接 · 请仅用于查找你有权获取的公开 / 授权内容，尊重原作者版权<br>
+    数据源可在 <code>config.json</code> 添加自建 PanSou 实例（<code>docker run -d -p 8888:8888 ghcr.io/fish2018/pansou</code>）
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const state = { clouds:[], selected:new Set(), items:[], meta:null, sort:'relevance',
+                lastQuery:null, lastResult:null,
+                view: localStorage.getItem('pr-view') || 'resource' };
+
+/* ---------- 主题 ---------- */
+const savedTheme = localStorage.getItem('pr-theme');
+if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+$('#themeBtn').onclick = () => {
+  const cur = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = cur;
+  localStorage.setItem('pr-theme', cur);
+};
+
+/* ---------- 统一的 JSON 请求层 ----------
+   裸用 (await fetch()).json() 会在这三种情况下抛出难懂的
+   "Unexpected end of JSON input"，用户完全看不懂：
+     · 服务被重启 / 连接被重置 → 空响应体
+     · 上游太慢 → 请求被中断
+     · 后端返回了非 JSON（500 页、404 文本）
+   这里统一成「先读文本 → 判空 → 判状态 → 再解析」，并给出可操作的提示。 */
+async function apiGet(url, timeoutMs){
+  const ms = timeoutMs || 20000;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  let resp;
+  try {
+    resp = await fetch(url, { signal: ctl.signal });
+  } catch (e) {
+    clearTimeout(timer);
+    if (e && e.name === 'AbortError')
+      throw new Error('请求超时（超过 ' + Math.round(ms / 1000)
+        + ' 秒）。数据源响应较慢，请重试，或点「⟳ 再挖一次」。');
+    throw new Error('无法连接后端服务。请确认 panradar.py 仍在运行，然后刷新页面。');
+  }
+  clearTimeout(timer);
+
+  let text = '';
+  try {
+    text = await resp.text();
+  } catch (e) {
+    throw new Error('响应读取中断（连接被重置）。服务可能正在重启，请稍等几秒重试。');
+  }
+
+  /* 404 + /api/* 只有一个原因：页面不是由 panradar.py 提供的（被静态服务器 /
+     预览面板托管），所以接口请求打不到后端。这时刷新页面永远无效，必须换地址打开。
+     判 404 要放在"空 body"检查之前 —— 静态服务的 404 常常是空 body，
+     否则会被误报成"后端返回了空响应"。 */
+  if (resp.status === 404 && url.indexOf('/api/') === 0)
+    throw new Error('接口 404：当前页面不是由 panradar.py 提供的（页面被静态预览服务托管），'
+      + '所以页面里的 /api 请求都打不到后端。刷新无效，'
+      + '请直接在浏览器打开 panradar.py 启动时打印的地址（默认 http://127.0.0.1:8931/）。');
+
+  if (!text || !text.trim())
+    throw new Error('后端返回了空响应（HTTP ' + resp.status
+      + '）。服务可能正在重启或连接被中断，请稍等几秒重试。');
+
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error('后端返回的不是合法 JSON（HTTP ' + resp.status + '）。'
+      + '内容开头：' + text.slice(0, 80));
+  }
+}
+
+/* 搜索用：瞬时断连（服务刚重启、上游抖动）很常见，静默重试一次再报错。
+   业务错（404 / 500 / JSON 不对 / 页面来源不对）重试无意义，直接抛。 */
+async function apiGetRetry(url, timeoutMs){
+  try {
+    return await apiGet(url, timeoutMs);
+  } catch (e) {
+    const transient = /(连接|重启|中断|超时|fetch|abort|Failed)/i.test(e.message || '');
+    if (!transient) throw e;
+    await new Promise(res => setTimeout(res, 900));
+    return await apiGet(url, timeoutMs);
+  }
+}
+
+/* ---------- 初始化 ---------- */
+async function init(){
+  try {
+    const m = await apiGet('/api/meta', 15000);
+    state.meta = m;
+    $('#ver').textContent = 'v' + m.version;
+    state.clouds = m.clouds;
+    const savedSel = localStorage.getItem('pr-clouds');
+    state.selected = new Set(savedSel ? JSON.parse(savedSel)
+                                      : m.clouds.map(c => c.key));
+    renderCloudChips();
+    loadHistory();
+  } catch (e) {
+    $('#status').innerHTML = '<b style="color:var(--err)">后端未就绪：</b> '
+      + esc(e.message);
+  }
+}
+function renderCloudChips(){
+  const box = $('#cloudChips'); box.innerHTML = '';
+  state.clouds.forEach(c => {
+    const b = document.createElement('div');
+    b.className = 'chip' + (state.selected.has(c.key) ? ' on' : '');
+    b.textContent = c.label;
+    if (state.selected.has(c.key)) b.style.background = c.color;
+    b.onclick = () => {
+      state.selected.has(c.key) ? state.selected.delete(c.key) : state.selected.add(c.key);
+      localStorage.setItem('pr-clouds', JSON.stringify([...state.selected]));
+      renderCloudChips();
+    };
+    box.appendChild(b);
+  });
+}
+$('#onlyMain').onclick = () => {
+  state.selected = new Set(['baidu','quark','aliyun']);
+  localStorage.setItem('pr-clouds', JSON.stringify([...state.selected]));
+  renderCloudChips();
+};
+$('#allClouds').onclick = () => {
+  state.selected = new Set(state.clouds.map(c => c.key));
+  localStorage.setItem('pr-clouds', JSON.stringify([...state.selected]));
+  renderCloudChips();
+};
+
+/* ---------- 搜索 ---------- */
+$('#go').onclick = doSearch;
+['main','author'].forEach(id => $('#'+id).addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+}));
+$('#sort').onchange = e => { state.sort = e.target.value; doSearch(true); };
+
+async function doSearch(reuse, refresh){
+  const main = $('#main').value.trim(), author = $('#author').value.trim();
+  if (!main && !author) { $('#main').focus(); return; }
+  localStorage.setItem('pr-last', JSON.stringify({main, author}));
+
+  const goBtn = $('#go'), digBtn = $('#dig');
+  goBtn.disabled = true; if (digBtn) digBtn.disabled = true;
+  $('#status').innerHTML = '';
+  const stale = $('#suggest'); if (stale) stale.remove();
+  showWaiting(refresh);
+
+  const q = new URLSearchParams({
+    main, author,
+    deep: $('#deep').checked ? '1' : '0',
+    refresh: refresh ? '1' : '0',
+    sort: state.sort,
+    clouds: [...state.selected].join(',')
+  });
+  const t0 = Date.now();
+  const tick = setInterval(() => bumpWaiting(t0), 1000);
+  try {
+    const r = await apiGetRetry('/api/search?' + q, 240000);
+    if (!r.ok) throw new Error(r.error || '搜索失败');
+    state.items = r.items;
+    state.lastQuery = {main, author};
+    state.lastResult = r;
+    renderStatus(r, Date.now() - t0);
+    renderResults(r);
+    loadHistory();
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    clearInterval(tick);
+    goBtn.disabled = false; if (digBtn) digBtn.disabled = false;
+  }
+}
+
+/* 等待中的进度条：长等待必须让用户看到「真的在跑」。
+   30 秒没有任何变化，用户会以为卡死然后刷新，反而更容易踩到断连。 */
+function showWaiting(refresh){
+  const wrap = document.createElement('div');
+  wrap.className = 'empty';
+  const spin = document.createElement('div');
+  spin.className = 'spinner';
+  const msg = document.createElement('div');
+  msg.id = 'waitmsg';
+  msg.style.marginTop = '10px';
+  msg.textContent = refresh ? '正在重新挖掘各源并合并新结果，通常 10–30 秒…'
+                            : '正在并发查询各搜索源，通常 5–15 秒…';
+  wrap.appendChild(spin); wrap.appendChild(msg);
+  const box = $('#results');
+  box.innerHTML = '';
+  box.appendChild(wrap);
+}
+
+function bumpWaiting(t0){
+  const el = $('#waitmsg');
+  if (!el) return;
+  el.textContent = '已等待 ' + Math.round((Date.now() - t0) / 1000)
+    + ' 秒…（数据源多时较慢，请稍候）';
+}
+
+/* 失败不再只丢一句天书：给出原因 + 一键重试 */
+function showError(msg){
+  $('#status').innerHTML = '';
+  const box = $('#results');
+  box.innerHTML = '';
+  const err = document.createElement('div');
+  err.className = 'err';
+  err.textContent = '⚠️ ' + msg;
+  const btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.id = 'retry';
+  btn.style.marginLeft = '10px';
+  btn.textContent = '重试';
+  btn.onclick = () => doSearch(true, false);
+  err.appendChild(btn);
+  box.appendChild(err);
+}
+
+/* 「再挖一次」：跳过缓存重新查询，新结果并入已有缓存（越挖越全） */
+function digMore(){
+  if (!state.lastQuery) return;
+  if (state.lastQuery.main) $('#main').value = state.lastQuery.main;
+  if (state.lastQuery.author) $('#author').value = state.lastQuery.author;
+  doSearch(true, true);
+}
+
+function renderStatus(r, wall){
+  const st = r.stats, parts = [];
+  parts.push(`<span>命中 <b style="color:var(--text)">${st.total}</b> 条`
+    + `（去重后展示 ${st.shown}，原始 ${st.raw}）</span>`);
+  parts.push(`<span>耗时 ${st.secs}s</span>`);
+  parts.push(`<span>${st.cached ? '⚡ 缓存命中' : '关键词 ' + st.queries + ' 组'}</span>`);
+  if (st.degraded) parts.push(`<span style="color:var(--warn)">↯ 完整短语无结果，已自动降级分词：${esc((st.tokens||[]).join(' / '))}</span>`);
+  if (r.queries && r.queries.length)
+    parts.push(`<span style="opacity:.75">查询词：${esc(r.queries.join(' / '))}</span>`);
+  if (st.total > 0 && st.total < 8)
+    parts.push(`<span style="opacity:.75">结果偏少？点「再挖一次」，新一批会并入累积</span>`);
+  for (const [name, v] of Object.entries(st.sources || {})) {
+    const col = v.ok ? 'var(--ok)' : 'var(--err)';
+    const txt = v.ok ? `${v.items} 条${v.cached ? ' (缓存)' : ''}`
+                     : esc((v.error||'失败').slice(0,40));
+    parts.push(`<span class="srcstat"><i class="dot" style="background:${col}"></i>`
+      + `${esc(name)}：${txt}</span>`);
+  }
+  parts.push('<button class="btn" id="copyAll" title="复制全部结果的标题 / 链接 / 提取码">⧉ 复制全部</button>');
+  parts.push('<button class="btn" id="dig">⟳ 再挖一次</button>');
+  $('#status').innerHTML = parts.join('');
+  const digEl = $('#dig');
+  if (digEl) digEl.onclick = digMore;
+  const caEl = $('#copyAll');
+  if (caEl) caEl.onclick = () => copyText(allPayload(r), caEl);
+  renderSuggest(r.suggest);
+}
+
+/* 「顺藤摸瓜」：搜作者名常常只出几条 —— 因为资源是按**课程名**索引的。
+   后端从已搜到的标题里认出「除了搜索词之外的名字」（如搜「风间影月」认出
+   「Java高级工程师」），点一下换个词再搜，命中量往往翻几十倍。 */
+function renderSuggest(topics){
+  const old = $('#suggest'); if (old) old.remove();
+  if (!topics || !topics.length) return;
+  const box = document.createElement('div');
+  box.className = 'suggest'; box.id = 'suggest';
+  const label = document.createElement('span');
+  label.className = 'sg-label';
+  label.textContent = '💡 顺藤摸瓜：从搜到的标题里认出了这些名字，点一下换它再搜';
+  box.appendChild(label);
+  topics.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.textContent = t;
+    b.title = '用「' + t + '」重新搜索';
+    b.onclick = () => { $('#main').value = t; $('#author').value = ''; doSearch(false); };
+    box.appendChild(b);
+  });
+  $('#status').insertAdjacentElement('afterend', box);
+}
+
+function renderResults(r){
+  const box = $('#results');
+  if (!r || !r.groups || !r.groups.length){
+    renderViewbar(null);
+    box.innerHTML = '<div class="empty">各数据源都没有命中（已包含自动分词降级搜索）。<br>'
+      + '可以试试：<br>· 换更短的课程名，去掉书名号 / 引号 / 标点<br>'
+      + '· 只填其中一个关键词（比如只填「创造营」或只填「AI产品」）<br>'
+      + '· 勾选「深度搜索」<br>'
+      + '· 点上面的「顺藤摸瓜」换个名字再搜<br>'
+      + '· 在 <code>config.json</code> 里多加几个数据源，或 Docker 自建 PanSou 当主源</div>';
+    return;
+  }
+  renderViewbar(r);
+  let html = '';
+  if (state.view === 'resource' && (r.clusters || []).length){
+    r.clusters.forEach(c => { html += clusterCard(c); });
+  } else {
+    r.groups.forEach(g => {
+      html += `<div class="group"><div class="ghead">`
+        + `<i class="bar" style="background:${g.color}"></i>${esc(g.label)}`
+        + `<span class="n">${g.items.length} 条</span></div>`;
+      g.items.forEach(it => { html += card(it, g.color); });
+      html += '</div>';
+    });
+  }
+  box.innerHTML = html;
+  bindActions(box);
+}
+
+/* 「按资源聚合」/「按网盘分组」切换。
+   同一门课常被转存到百度 / 夸克 / 阿里，按网盘分组时它们散在三处，
+   用户得自己认出「这是同一个东西」；按资源聚合后一份资源一块，
+   块内直接列出可选网盘，挑一个转存即可。 */
+function renderViewbar(r){
+  const bar = $('#viewbar');
+  if (!r || !r.groups || !r.groups.length){
+    bar.style.display = 'none'; bar.innerHTML = ''; return;
+  }
+  bar.style.display = 'flex';
+  bar.innerHTML = '<span class="lbl">视图：</span>';
+  const mk = (v, text, n) => {
+    const b = document.createElement('button');
+    b.className = 'vtab' + (state.view === v ? ' on' : '');
+    b.dataset.v = v;
+    b.textContent = text + ' ' + n;
+    b.onclick = () => {
+      state.view = v;
+      localStorage.setItem('pr-view', v);
+      if (state.lastResult) renderResults(state.lastResult);
+    };
+    bar.appendChild(b);
+  };
+  mk('resource', '按资源聚合', (r.clusters || []).length);
+  mk('cloud', '按网盘分组', r.groups.length);
+}
+
+function bindActions(root){
+  root.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copy(b));
+  root.querySelectorAll('[data-open]').forEach(b => b.onclick = () => {
+    window.open(b.dataset.open, '_blank', 'noopener');
+  });
+}
+
+/* 质量标签徽章：good=能用（清晰度/完结/含源码），warn=留意（更新中），info=补充信息 */
+function tagHtml(tags){
+  if (!tags || !tags.length) return '';
+  return '<div class="tags">' + tags.map(t =>
+    `<span class="tag ${esc(t.k)}">${esc(t.t)}</span>`).join('') + '</div>';
+}
+
+function cloudColor(key){
+  const c = (state.clouds || []).find(x => x.key === key);
+  return (c && c.color) || 'var(--muted)';
+}
+
+/* 多行文本放进 HTML 属性：换行在属性值里合法，但统一写成 &#10; 最稳 */
+function attrPayload(s){
+  return esc(s).replace(/\n/g, '&#10;');
+}
+
+/* 一份资源一块，块内列出各个网盘的分享入口 */
+function clusterCard(c){
+  const its = c.items || [];
+  const rows = its.map(it => {
+    const col = cloudColor(it.cloud);
+    const payload = it.pwd ? `${it.url} 提取码:${it.pwd}` : it.url;
+    const pwd = it.pwd
+      ? `<span class="pwd" data-copy="${esc(it.pwd)}" title="点击复制提取码">`
+        + `提取码 ${esc(it.pwd)}</span>`
+      : '<span style="opacity:.55">无提取码</span>';
+    const size = fmtSize(it.size);
+    const age = (it.age_days != null) ? ` · ${it.age_days} 天前` : '';
+    return `<div class="crow">
+        <span class="cl" style="color:${col}"><i style="background:${col}"></i>${esc(it.cloud_label)}</span>
+        <span class="cinfo">${pwd}${size ? `<span>${size}</span>` : ''}`
+      + `<span>${esc(it.dt_display || '日期未知')}${age}</span></span>
+        <span class="cacts">
+          <button class="btn" data-copy="${esc(payload)}">${it.pwd ? '复制链接+码' : '复制链接'}</button>
+          <button class="btn" data-open="${esc(it.url)}">打开</button>
+        </span>
+        <span class="curl">${esc(it.url)}</span>
+      </div>`;
+  }).join('');
+
+  const cloudList = (c.cloud_labels || []).map((l, i) =>
+    `<span style="color:${(c.cloud_colors || [])[i] || 'var(--muted)'}">${esc(l)}</span>`
+  ).join(' / ');
+  const rel = (c.rel != null) ? `匹配 ${Math.round(c.rel * 100)}%` : '';
+  const allText = its.map(it =>
+    `${it.cloud_label}\t${it.url}${it.pwd ? ' 提取码:' + it.pwd : ''}`).join('\n');
+
+  return `<div class="cluster">
+      <div class="chead">
+        <div style="flex:1;min-width:0">
+          ${tagHtml(c.tags)}
+          <div class="ctitle">${esc(c.title)}</div>
+          <div class="cmeta">
+            <span>${its.length} 个分享 · ${cloudList}</span>
+            ${rel ? `<span>${rel}</span>` : ''}
+          </div>
+        </div>
+        <button class="btn" data-copy="${attrPayload(allText)}"
+          title="复制本组全部网盘链接与提取码">复制本组全部</button>
+      </div>
+      <div class="crows">${rows}</div>
+    </div>`;
+}
+
+function fmtSize(n){
+  if (!n || n <= 0) return '';
+  const u = ['B','KB','MB','GB','TB']; let i = 0; n = Number(n);
+  while (n >= 1024 && i < u.length - 1){ n /= 1024; i++; }
+  return (n >= 100 ? Math.round(n) : n.toFixed(1)) + u[i];
+}
+
+function card(it, color){
+  const dt = it.dt_display || '日期未知';
+  const age = (it.age_days != null) ? `${it.age_days} 天前` : '';
+  const pwd = it.pwd
+    ? `<span class="pwd" data-copy="${esc(it.pwd)}" title="点击复制提取码">`
+      + `提取码 ${esc(it.pwd)}</span>`
+    : '';
+  const size = fmtSize(it.size);
+  const rel = (it.rel != null) ? `${Math.round(it.rel * 100)}%` : '';
+  const img = (it.images && it.images[0])
+    ? `<img class="thumb" src="${esc(it.images[0])}" referrerpolicy="no-referrer"
+         onerror="this.style.display='none'">` : '';
+  const payload = it.pwd ? `${it.url} 提取码:${it.pwd}` : it.url;
+  return `<div class="card">${img}<div class="cbody">
+      ${tagHtml(it.tags)}
+      <div class="title" title="${esc(it.title || '')}">${esc(it.title || '(无标题)')}</div>
+      <div class="meta">
+        <span style="color:${color};font-weight:600">${esc(it.cloud_label)}</span>
+        ${pwd}
+        ${size ? `<span>${size}</span>` : ''}
+        <span>${esc(dt)}${age ? ' · ' + age : ''}</span>
+        ${rel ? `<span>匹配 ${rel}</span>` : ''}
+        ${it.low ? '<span style="opacity:.6">低相关</span>' : ''}
+        ${it.source ? `<span>${esc(it.source.replace('plugin:',''))}</span>` : ''}
+      </div>
+      <div class="link">${esc(it.url)}</div>
+    </div>
+    <div class="acts">
+      <button class="btn" data-copy="${esc(payload)}">复制链接</button>
+      <button class="btn" data-open="${esc(it.url)}">打开</button>
+    </div></div>`;
+}
+
+function copy(btn){ copyText(btn.dataset.copy, btn); }
+function copyText(text, btn){
+  const done = () => {
+    if (!btn) return;
+    const old = btn.textContent; btn.textContent = '✓ 已复制'; btn.classList.add('done');
+    setTimeout(() => { btn.textContent = old; btn.classList.remove('done'); }, 1400);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else fallbackCopy(text, done);
+}
+/* 一次性拿走全部结果的「标题 + 链接 + 提取码」，方便批量转存 */
+function allPayload(r){
+  const its = (r && r.items) || [];
+  return its.map(it => (it.cloud_label || '') + '\t' + (it.title || '') + '\t'
+    + it.url + (it.pwd ? ' 提取码:' + it.pwd : '')).join('\n');
+}
+function fallbackCopy(text, done){
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); } catch(e) { alert('复制失败，请手动选择'); }
+  document.body.removeChild(ta);
+}
+
+/* ---------- 导出 ---------- */
+async function exportAs(fmt){
+  if (!state.items.length) { alert('还没有搜索结果'); return; }
+  const r = await fetch('/api/export', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({fmt, items: state.items})
+  });
+  const blob = await r.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `panradar-${new Date().toISOString().slice(0,10)}.${fmt}`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+$('#expMd').onclick = () => exportAs('md');
+$('#expCsv').onclick = () => exportAs('csv');
+
+/* ---------- 历史 / 缓存 ---------- */
+async function loadHistory(){
+  try{
+    const r = await (await fetch('/api/history')).json();
+    const box = $('#hist');
+    if (!r.history || !r.history.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<span class="lbl" style="font-size:12px;color:var(--muted)">最近：</span>'
+      + r.history.map(h => `<span class="h" data-m="${esc(h.main)}" data-a="${esc(h.author)}">`
+        + `${esc(h.main || h.author)}<span style="opacity:.55"> · ${h.hits}</span></span>`).join('');
+    box.querySelectorAll('.h').forEach(el => el.onclick = () => {
+      $('#main').value = el.dataset.m; $('#author').value = el.dataset.a; doSearch();
+    });
+  }catch(e){}
+}
+$('#clearCache').onclick = async () => {
+  await fetch('/api/cache/clear');
+  const b = $('#clearCache'); b.textContent = '已清除'; setTimeout(() => b.textContent = '清缓存', 1200);
+};
+
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* ---------- 启动 ---------- */
+init().then(() => {
+  const last = localStorage.getItem('pr-last');
+  if (last) { try{ const o = JSON.parse(last); $('#main').value = o.main||''; $('#author').value = o.author||''; }catch(e){} }
+  $('#main').focus();
+});
+</script>
+</body>
+</html>

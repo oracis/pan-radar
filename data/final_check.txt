@@ -1,0 +1,88 @@
+页面 / -> (200, 21065)
+meta  -> "1.3.0"
+======================================================================
+## 作者名   「风间影月」
+  ok=True  命中 2 条 / 展示 2 / 原始 2 / 1.9s
+    · PanSou · so.252035.xyz OK  0条
+    · PanSou · pansou.app    OK  2条
+    · Misoso 夸克搜索            OK  0条
+    · 混合盘搜索                  ERR 0条  HTTP 429
+  顺藤摸瓜建议: Java高级工程师
+      [百度网盘] 匹配100% 慕课网-体系课-Java高级工程师(风间影月 )
+          https://pan.baidu.com/s/19qRHg4erpemeFK_rBfIRwA?pwd=rb2v  提取码 rb2v
+      [夸克网盘] 匹配100% 慕课网-体系课-Java高级工程师(风间影月 )
+          https://pan.quark.cn/s/b4f9d3d23385
+======================================================================
+## 课程名（用户原案例）   「Vibe Coding 一人团队项目开发实战」
+  ok=True  命中 1 条 / 展示 1 / 原始 1 / 0.3s
+    · PanSou · so.252035.xyz OK  1条
+    · PanSou · pansou.app    OK  0条
+    · Misoso 夸克搜索            OK  0条
+    · 混合盘搜索                  ERR 0条  冷却中，本次跳过
+  顺藤摸瓜建议: mksz989
+      [夸克网盘] 匹配100% mksz989-Vibe Coding 一人团队项目开发实战
+          https://pan.quark.cn/s/9ef896afc60f
+======================================================================
+## 课程名   「Java高级工程师」
+  ok=True  命中 42 条 / 展示 42 / 原始 43 / 0.4s
+    · PanSou · so.252035.xyz OK  38条
+    · PanSou · pansou.app    OK  5条
+    · Misoso 夸克搜索            OK  0条
+    · 混合盘搜索                  ERR 0条  冷却中，本次跳过
+  顺藤摸瓜建议: （无）
+      [夸克网盘] 匹配100% 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/f61914c1e26c
+      [夸克网盘] 匹配100% 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/b9adbeb817b7
+      [夸克网盘] 匹配100% 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/c29efc0f5fd5
+      [夸克网盘] 匹配100% 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/6c3033ec48f5
+      [夸克网盘] 匹配100% 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/ace6439ba097
+      [夸克网盘] 匹配100% 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/69c79d530187
+      [夸克网盘] 匹配100% 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/29caed65d811
+      [夸克网盘] 匹配100% 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/73905c835fe4
+      [夸克网盘] 匹配100% 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/a288b498c25a
+      [夸克网盘] 匹配100% 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/b3fc902c9d63
+======================================================================
+## 课程名（不带英文前缀）   「一人团队项目开发实战」
+  ok=True  命中 2 条 / 展示 2 / 原始 2 / 0.3s
+    · PanSou · so.252035.xyz OK  2条
+    · PanSou · pansou.app    OK  0条
+    · Misoso 夸克搜索            OK  0条
+    · 混合盘搜索                  ERR 0条  冷却中，本次跳过
+  顺藤摸瓜建议: （无）
+      [夸克网盘] 匹配40% (弱) Vibe Coding实战:一人团队搞定多端项目全流程
+          https://pan.quark.cn/s/ae23696571a0
+      [夸克网盘] 匹配40% (弱) 【尚硅谷】乐尚代驾项目-带源码课件
+          https://pan.quark.cn/s/559d945530cb
+======================================================================
+## 作者 + 课程 组合   「马老师 Java高级工程师」
+  ok=True  命中 1 条 / 展示 1 / 原始 1 / 0.3s
+    · PanSou · so.252035.xyz OK  1条
+    · PanSou · pansou.app    OK  0条
+    · Misoso 夸克搜索            OK  0条
+    · 混合盘搜索                  ERR 0条  冷却中，本次跳过
+  顺藤摸瓜建议: （无）
+      [夸克网盘] 匹配100% 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/df8b2eb7acee
+======================================================================
+## 顺藤摸瓜闭环验证（用户只给作者名的真实场景）
+  第 1 轮 搜「风间影月」-> 2 条；认出：['Java高级工程师']
+  第 2 轮 搜「Java高级工程师」-> 42 条（原始 43）
+      [夸克网盘] 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/f61914c1e26c
+      [夸克网盘] 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/b9adbeb817b7
+      [夸克网盘] 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/c29efc0f5fd5
+      [夸克网盘] 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/6c3033ec48f5
+      [夸克网盘] 马老师的Java高级工程师就业班
+          https://pan.quark.cn/s/ace6439ba097
