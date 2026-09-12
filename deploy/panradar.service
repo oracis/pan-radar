@@ -1,0 +1,23 @@
+[Unit]
+Description=PanRadar 网盘资源雷达
+After=network.target
+
+[Service]
+Type=simple
+User=panradar
+Group=panradar
+WorkingDirectory=/opt/panradar
+# 绑定 127.0.0.1：由本机 nginx 反代或阿里云 CDN/SLB 回源。
+# 若用 CDN/SLB 直接回源到 ECS 公网 IP:8931，请把 --host 改为 0.0.0.0。
+ExecStart=/usr/bin/env python3 /opt/panradar/panradar.py --host 127.0.0.1 --port 8931 --no-browser
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+# 出网走系统代理（与本地一致）：如需代理，取消下一行注释并改成你的代理地址
+# Environment=HTTP_PROXY=http://127.0.0.1:10808
+# Environment=HTTPS_PROXY=http://127.0.0.1:10808
+
+[Install]
+WantedBy=multi-user.target

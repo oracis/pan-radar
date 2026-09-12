@@ -1492,11 +1492,11 @@ def selftest(cfg, store, args):
 
 
 # --------------------------------------------------------------------------- #
-def find_free_port(start):
+def find_free_port(start, host="127.0.0.1"):
     for p in range(start, start + 40):
         with socket.socket() as s:
             try:
-                s.bind(("127.0.0.1", p))
+                s.bind((host, p))
                 return p
             except OSError:
                 continue
@@ -1514,6 +1514,8 @@ def main():
 
     ap = argparse.ArgumentParser(description="PanRadar 网盘资源雷达")
     ap.add_argument("--port", type=int, default=None)
+    ap.add_argument("--host", default=None,
+                    help="bind host (default 127.0.0.1; use 0.0.0.0 behind CDN/SLB)")
     ap.add_argument("--no-cache", action="store_true")
     ap.add_argument("--deep", action="store_true")
     ap.add_argument("--author", default="")
@@ -1528,15 +1530,16 @@ def main():
     if args.selftest is not None:
         return selftest(cfg, store, args)
 
+    host = args.host or cfg.get("host", "127.0.0.1")
     port = args.port or int(cfg.get("port", 8931))
-    port = find_free_port(port)
+    port = find_free_port(port, host)
 
     Handler.cfg = cfg
     Handler.store = store
     Handler.engine = Engine(cfg, store)
 
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    url = "http://127.0.0.1:%d/" % port
+    httpd = ThreadingHTTPServer((host, port), Handler)
+    url = "http://%s:%d/" % (host, port)
     print("=" * 58)
     print("  PanRadar / 网盘资源雷达  v%s" % APP_VERSION)
     print("  地址: %s   (Ctrl+C 退出)" % url)
