@@ -219,8 +219,12 @@
   </div>
 </div>
 
+<script src="config.js"></script>
 <script>
 const $ = s => document.querySelector(s);
+// API 基地址：本地同源留空；OSS 静态版部署时由 config.js 设置为 FC 的 /api 地址
+const API_BASE = window.PANRADAR_API_BASE || "";
+const apiUrl = p => API_BASE + p;
 const state = { clouds:[], selected:new Set(), items:[], meta:null, sort:'relevance',
                 lastQuery:null, lastResult:null,
                 view: localStorage.getItem('pr-view') || 'resource' };
@@ -268,10 +272,10 @@ async function apiGet(url, timeoutMs){
      预览面板托管），所以接口请求打不到后端。这时刷新页面永远无效，必须换地址打开。
      判 404 要放在"空 body"检查之前 —— 静态服务的 404 常常是空 body，
      否则会被误报成"后端返回了空响应"。 */
-  if (resp.status === 404 && url.indexOf('/api/') === 0)
-    throw new Error('接口 404：当前页面不是由 panradar.py 提供的（页面被静态预览服务托管），'
-      + '所以页面里的 /api 请求都打不到后端。刷新无效，'
-      + '请直接在浏览器打开 panradar.py 启动时打印的地址（默认 http://127.0.0.1:8931/）。');
+  if (resp.status === 404 && url.indexOf('/api/') >= 0)
+    throw new Error('接口 404：请求没打到后端。若是 OSS 静态版，请确认 config.js 里的 '
+      + 'PANRADAR_API_BASE 指向正确的 FC 地址；若是本地版，请直接用 panradar.py 启动地址'
+      + '（默认 http://127.0.0.1:8931/）打开页面，不要用静态预览服务打开。');
 
   if (!text || !text.trim())
     throw new Error('后端返回了空响应（HTTP ' + resp.status
@@ -301,7 +305,7 @@ async function apiGetRetry(url, timeoutMs){
 /* ---------- 初始化 ---------- */
 async function init(){
   try {
-    const m = await apiGet('/api/meta', 15000);
+    const m = await apiGet(apiUrl('/api/meta'), 15000);
     state.meta = m;
     $('#ver').textContent = 'v' + m.version;
     state.clouds = m.clouds;
@@ -369,7 +373,7 @@ async function doSearch(reuse, refresh){
   const t0 = Date.now();
   const tick = setInterval(() => bumpWaiting(t0), 1000);
   try {
-    const r = await apiGetRetry('/api/search?' + q, 240000);
+    const r = await apiGetRetry(apiUrl('/api/search?') + q, 240000);
     if (!r.ok) throw new Error(r.error || '搜索失败');
     state.items = r.items;
     state.lastQuery = {main, author};
@@ -682,7 +686,7 @@ function fallbackCopy(text, done){
 /* ---------- 导出 ---------- */
 async function exportAs(fmt){
   if (!state.items.length) { alert('还没有搜索结果'); return; }
-  const r = await fetch('/api/export', {
+  const r = await fetch(apiUrl('/api/export'), {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({fmt, items: state.items})
   });
@@ -699,7 +703,7 @@ $('#expCsv').onclick = () => exportAs('csv');
 /* ---------- 历史 / 缓存 ---------- */
 async function loadHistory(){
   try{
-    const r = await (await fetch('/api/history')).json();
+    const r = await (await fetch(apiUrl('/api/history'))).json();
     const box = $('#hist');
     if (!r.history || !r.history.length) { box.innerHTML = ''; return; }
     box.innerHTML = '<span class="lbl" style="font-size:12px;color:var(--muted)">最近：</span>'
@@ -711,7 +715,7 @@ async function loadHistory(){
   }catch(e){}
 }
 $('#clearCache').onclick = async () => {
-  await fetch('/api/cache/clear');
+  await fetch(apiUrl('/api/cache/clear'));
   const b = $('#clearCache'); b.textContent = '已清除'; setTimeout(() => b.textContent = '清缓存', 1200);
 };
 

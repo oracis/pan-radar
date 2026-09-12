@@ -1297,6 +1297,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self._emit_cors()
         self.end_headers()
         if head_only:
             return
@@ -1362,6 +1363,25 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, b"")
             except Exception:
                 pass
+
+    def _emit_cors(self):
+        # 跨域支持：OSS 静态前端跨域调用 FC 的 /api/* 时，响应必须带 CORS 头，否则浏览器拦截。
+        # 仅对 /api/ 路径开放，静态资源不带。需要更强约束时可改成固定域名白名单。
+        try:
+            if urllib.parse.urlparse(self.path).path.startswith("/api/"):
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+                self.send_header("Access-Control-Max-Age", "86400")
+        except Exception:
+            pass
+
+    def do_OPTIONS(self):
+        # 浏览器跨域预检（CORS preflight）。必须返回 204 + CORS 头，否则实际请求被拦。
+        self.send_response(204)
+        self._emit_cors()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _route_get(self):
         path = urllib.parse.urlparse(self.path).path
@@ -1453,6 +1473,7 @@ class Handler(BaseHTTPRequestHandler):
                     i.get("source") or "未知来源", i.get("score", "")))
             body, ctype, ext = ("\n".join(lines) + "\n").encode("utf-8"), "text/markdown; charset=utf-8", "md"
         self.send_response(200)
+        self._emit_cors()
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Disposition",
                          'attachment; filename="panradar-%s.%s"' % (stamp, ext))

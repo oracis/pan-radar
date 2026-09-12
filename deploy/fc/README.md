@@ -84,3 +84,36 @@ curl -s "https://pan.ydtgo.top/api/search?q=%E9%A3%8E%E9%97%B4%E5%BD%B1%E6%9C%88
 4. 其余（触发器 / 自定义域名 / 证书）同上。
 
 > ⚠️ 自定义运行时基础镜像**默认不含 Python**，需自行确认或补装，故**容器方案更稳**，推荐优先用上面的 Docker 流程。
+
+---
+
+## 推荐组合：OSS 静态前端 + FC 聚合层（多源，最轻）
+
+静态走 OSS（和你三个现有站点同套路），多源搜索算力留在 FC（复用上面的 Docker 流程）。
+实测 PanSou 主源 `so.252035.xyz` 的 CORS 是开放的，但其它源（pansou.app 无 CORS、misoso/hunhepan 是 http 会被混合内容拦截）
+**浏览器不能直接跨域拉**，所以「多源聚合」必须由服务端（FC）完成，前端只调 FC 的 `/api/*`。
+这既比纯 ECS 轻，又守住「示例必须搜到」的多源底线。
+
+后端已对 `/api/*` 加了 `Access-Control-Allow-Origin: *` 和 `OPTIONS` 预检支持，OSS 页面跨域调用无障碍。
+
+### 步骤
+
+1. **FC 聚合层**（同上 Docker 流程）：构建/推送镜像、`s deploy -t deploy/fc/s.yaml`。
+   给 FC 也绑一个自定义域名最省事，例如 `api.pan.ydtgo.top`（同一个证书）；
+   或者直接用 FC 默认地址 `https://<uid>.<region>.fcapp.run`。
+2. **OSS 静态前端**：把 `web/` 整个目录上传到 OSS bucket（开静态网站托管），
+   用你现有的 CDN / 证书套路把 `pan.ydtgo.top` 指过来——和你另外两个站点一模一样。
+3. **填 API 地址**：编辑 `web/config.js`，把
+   ```js
+   window.PANRADAR_API_BASE = "";
+   ```
+   改成你的 FC 地址，例如：
+   ```js
+   window.PANRADAR_API_BASE = "https://api.pan.ydtgo.top";
+   ```
+   改完重新上传 `config.js` 到 OSS。**本地直接跑 `panradar.py` 时留空即可（同源）。**
+4. **验证**：浏览器打开 `https://pan.ydtgo.top/` → 搜索 → 网络面板里 `/api/search` 走的是
+   `api.pan.ydtgo.top` 且带 `Access-Control-Allow-Origin` 响应头，结果正常返回。
+
+> 进阶（可选，免跨域）：若你的 CDN 支持路径路由，可把 `pan.ydtgo.top/` 指 OSS、`pan.ydtgo.top/api/*`
+> 指 FC，前端 `API_BASE` 留空（同源），连 CORS 都不需要。默认用上面的跨域方案更省事。
