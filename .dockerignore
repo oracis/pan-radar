@@ -1,0 +1,11 @@
+.git
+__pycache__
+*.pyc
+data/_*
+*_test.py
+_srv.log
+probe_sources.txt
+selftest.txt
+http_e2e.txt
+deploy
+.workbuddy

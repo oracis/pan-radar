@@ -1,0 +1,39 @@
+# Serverless Devs 配置：把 PanRadar 部署到阿里云函数计算（FC）
+# 用法：s deploy -t deploy/fc/s.yaml
+# 前置：npm i -g @serverless-devs/s && s config add（绑定你的阿里云 AccessKey）
+edition: 3.0
+name: panradar-fc
+access: default            # 你的 Serverless Devs 密钥别名（s config add 时设定）
+
+resources:
+  panradar:
+    component: fc3
+    props:
+      region: cn-hangzhou            # 改成你的 FC 地域
+      functionName: panradar
+      description: PanRadar 网盘资源雷达（多源聚合 + LCS 噪声过滤 + 顺藤摸瓜）
+      runtime: custom-container
+      timeout: 120                   # 多源搜索可能耗时，已留足；上限 600s
+      memorySize: 512
+      environmentVariables:
+        PANRADAR_DATA_DIR: /tmp/panradar   # 缓存落可写目录（/code 只读）
+      internetAccess: true           # 允许函数出公网访问 PanSou 源（重要）
+      customContainerConfig:
+        # 改成你 ACR 里的镜像地址（个人版仓库即可）
+        image: registry.cn-hangzhou.aliyuncs.com/<your-namespace>/panradar:latest
+        port: 9000                   # 必须与 Dockerfile 的 --port 一致
+        command: ""                  # 使用镜像内的 CMD
+        args: ""
+      triggers:
+        - name: httpTrigger
+          type: http
+          config:
+            authType: anonymous      # 匿名访问（公开站点）
+            methods: [GET, POST, PUT, DELETE, HEAD, OPTIONS]
+      customDomains:
+        - domainName: pan.ydtgo.top  # 自定义域名（需先在云解析加 A 记录指向 FC）
+          protocol: HTTPS
+          certConfig:
+            certName: ydtgo-top      # 改成你现有的 SSL 证书名（FC/证书服务里）
+          route:
+            - path: /*

@@ -1,0 +1,8 @@
+#!/bin/bash
+# FC Custom Runtime（HTTP Server 模式）启动脚本
+# 仅用于「轻量 zip 上传、不用 Docker」的场景；容器方案用 Dockerfile 的 CMD，不需要本文件。
+# 使用前需 chmod +x bootstrap，并确保运行时基础镜像自带 python3。
+set -e
+PORT="${FC_SERVER_PORT:-9000}"
+cd "$(dirname "$0")"
+exec python3 panradar.py --host 0.0.0.0 --port "$PORT" --no-browser

@@ -47,7 +47,8 @@ except Exception:
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(APP_DIR, "web")
-DATA_DIR = os.path.join(APP_DIR, "data")
+# 缓存目录可经环境变量覆盖：FC / 容器等 /code 只读场景需指向可写目录（如 /tmp/panradar）
+DATA_DIR = os.environ.get("PANRADAR_DATA_DIR") or os.path.join(APP_DIR, "data")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 DB_PATH = os.path.join(DATA_DIR, "panradar.db")
 APP_VERSION = "1.4.1"
