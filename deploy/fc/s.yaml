@@ -1,39 +1,39 @@
 # Serverless Devs 配置：把 PanRadar 部署到阿里云函数计算（FC）
 # 用法：s deploy -t deploy/fc/s.yaml
-# 前置：npm i -g @serverless-devs/s && s config add（绑定你的阿里云 AccessKey）
-edition: 3.0
+# 前置：npm i -g @serverless-devs/s，并把阿里云 AccessKey 配置到 s 的 default 访问别名
+edition: 2.0.0
 name: panradar-fc
-access: default            # 你的 Serverless Devs 密钥别名（s config add 时设定）
+access: default            # Serverless Devs 密钥别名（s config add 时设定）
 
-resources:
+services:
   panradar:
     component: fc3
     props:
-      region: cn-hangzhou            # 改成你的 FC 地域
+      region: cn-shanghai           # FC 与你 ydtgo.top 站点同地域（OSS 前端桶在 cn-hongkong，跨域已放开）
+      serviceName: panradar-svc
       functionName: panradar
       description: PanRadar 网盘资源雷达（多源聚合 + LCS 噪声过滤 + 顺藤摸瓜）
-      runtime: custom-container
-      timeout: 120                   # 多源搜索可能耗时，已留足；上限 600s
+      # 自定义运行时（zip 上传，无需 Docker）：代码自带 bootstrap 起 python 服务
+      runtime: custom
+      handler: dummy.handler        # 自定义运行时忽略 handler，实际由 bootstrap 拉起
+      codeUri: ./code.zip           # 由 _build_fc_code.py 打包（bootstrap 含 755 执行位）
+      port: 9000                    # 自定义运行时监听端口（bootstrap 读取 FC_SERVER_PORT，兜底 9000）
+      timeout: 120                  # 多源搜索可能耗时，已留足；上限 600s
       memorySize: 512
       environmentVariables:
         PANRADAR_DATA_DIR: /tmp/panradar   # 缓存落可写目录（/code 只读）
       internetAccess: true           # 允许函数出公网访问 PanSou 源（重要）
-      customContainerConfig:
-        # 改成你 ACR 里的镜像地址（个人版仓库即可）
-        image: registry.cn-hangzhou.aliyuncs.com/<your-namespace>/panradar:latest
-        port: 9000                   # 必须与 Dockerfile 的 --port 一致
-        command: ""                  # 使用镜像内的 CMD
-        args: ""
       triggers:
         - name: httpTrigger
           type: http
           config:
             authType: anonymous      # 匿名访问（公开站点）
             methods: [GET, POST, PUT, DELETE, HEAD, OPTIONS]
-      customDomains:
-        - domainName: pan.ydtgo.top  # 自定义域名（需先在云解析加 A 记录指向 FC）
-          protocol: HTTPS
-          certConfig:
-            certName: ydtgo-top      # 改成你现有的 SSL 证书名（FC/证书服务里）
-          route:
-            - path: /*
+      # 自定义域名（pan.ydtgo.top）在证书可用后再启用，见 deploy/fc/README.md
+      # customDomains:
+      #   - domainName: pan.ydtgo.top
+      #     protocol: HTTPS
+      #     certConfig:
+      #       certName: ydtgo-top    # 改成你现有的 SSL 证书名（CAS 中）
+      #     route:
+      #       - path: /*

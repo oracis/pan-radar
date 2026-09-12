@@ -1406,7 +1406,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True})
         if path.startswith("/static/"):
             name = os.path.basename(path)
-            return self._serve_file(os.path.join(WEB_DIR, name), None)
+            return self._serve_file(os.path.join(WEB_DIR, name), self._guess_type(name))
         return self._send(404, "not found", "text/plain; charset=utf-8")
 
     def do_POST(self):
@@ -1419,6 +1419,24 @@ class Handler(BaseHTTPRequestHandler):
                 payload = {}
             return self._api_export(payload)
         return self._send(404, "not found", "text/plain; charset=utf-8")
+
+    _CT = {
+        ".html": "text/html; charset=utf-8",
+        ".js":   "text/javascript; charset=utf-8",
+        ".css":  "text/css; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+        ".svg":  "image/svg+xml",
+        ".png":  "image/png",
+        ".jpg":  "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif":  "image/gif",
+        ".ico":  "image/x-icon",
+        ".txt":  "text/plain; charset=utf-8",
+    }
+
+    def _guess_type(self, name):
+        ext = os.path.splitext(name)[1].lower()
+        return self._CT.get(ext, "application/octet-stream")
 
     def _serve_file(self, full, ctype):
         if not os.path.isfile(full):

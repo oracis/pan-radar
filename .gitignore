@@ -23,3 +23,6 @@ Thumbs.db
 
 # 用户私有配置（如果想 fork 后改）
 config.local.json
+
+# 部署构建产物（用 deploy/fc/_build_fc_code.py 重新生成）
+deploy/fc/code.zip
