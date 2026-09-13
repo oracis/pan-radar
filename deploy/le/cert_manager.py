@@ -45,6 +45,9 @@ OSS_TARGETS = [
     # 根域：原先 CNAME 到 OSS 海外入口、没绑证书，必须修
     {'bucket': 'susuper-ticket-hk', 'region': 'cn-hongkong', 'domain': 'ydtgo.top',
      'dns_rr': '@', 'fix_cname': True},
+    # 赚钱案例库（ai-case-library）静态站
+    {'bucket': 'ai-case-library', 'region': 'cn-hongkong', 'domain': 'case.ydtgo.top',
+     'dns_rr': 'case', 'fix_cname': False},
 ]
 
 # 分发目标：FC 自定义域名
