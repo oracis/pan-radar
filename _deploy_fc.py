@@ -11,7 +11,7 @@ AK = os.environ.get('ALIBABA_CLOUD_ACCESS_KEY_ID', '')
 SK = os.environ.get('ALIBABA_CLOUD_ACCESS_KEY_SECRET', '')
 if not AK or not SK:
     sys.exit('请先设置 ALIBABA_CLOUD_ACCESS_KEY_ID / ALIBABA_CLOUD_ACCESS_KEY_SECRET 环境变量')
-REGION = 'cn-shanghai'
+REGION = 'cn-hongkong'   # 用户指定：FC 迁到香港，与 OSS 桶同地域
 SERVICE = 'panradar-svc'
 FUNCTION = 'panradar'
 CODE_ZIP = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'deploy', 'fc', 'code.zip')

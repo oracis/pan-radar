@@ -9,7 +9,7 @@ if not AK or not SK:
 REGION = 'cn-hongkong'   # 用户指定：桶用香港 region（上海 region 公开读被账号策略拦截）
 ENDPOINT = 'https://oss-cn-hongkong.aliyuncs.com'
 BUCKET = 'panradar-ydtgo-hk'   # 桶名全局唯一，panradar-ydtgo 已被 cn-shanghai 占用
-FC_URL = 'https://panradar-panradar-svc-neqacybvqm.cn-shanghai.fcapp.run'
+FC_URL = 'https://panradar-panradar-svc-neqacybvqm.cn-hongkong.fcapp.run'
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
 
 auth = oss2.Auth(AK, SK)
