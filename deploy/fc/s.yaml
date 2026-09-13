@@ -9,7 +9,7 @@ services:
   panradar:
     component: fc3
     props:
-      region: cn-shanghai           # FC 与你 ydtgo.top 站点同地域（OSS 前端桶在 cn-hongkong，跨域已放开）
+      region: cn-hongkong           # 与 OSS 前端桶同地域（香港）；公网地址 *.cn-hongkong.fcapp.run
       serviceName: panradar-svc
       functionName: panradar
       description: PanRadar 网盘资源雷达（多源聚合 + LCS 噪声过滤 + 顺藤摸瓜）

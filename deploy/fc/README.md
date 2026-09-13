@@ -1,119 +1,128 @@
 # PanRadar 部署到阿里云函数计算（FC）
 
-## 为什么用 FC 而不是 ECS
+## 当前线上形态
 
-- **Serverless，按请求计费**：空闲时为 0 成本，不养常驻虚拟机；比 ECS 轻得多。
-- **自定义容器**：pan-radar 是零依赖 Python，用 `python:3.12-slim` 打镜像，直接跑现有 `panradar.py`，几乎不改代码。
-- **可绑自定义域名 + 现有证书**：`pan.ydtgo.top` 走 FC 自定义域名，挂你已有的 SSL 证书。
+**OSS 静态前端（香港）+ FC 聚合层（香港）**，这是实测跑通并正在使用的方案：
+
+| 组件 | 地址 | 说明 |
+| --- | --- | --- |
+| 静态前端 | `https://panradar-ydtgo-hk.oss-cn-hongkong.aliyuncs.com/` | 桶 `panradar-ydtgo-hk`，公开读 + 静态网站托管 |
+| 聚合层 | `https://panradar-panradar-svc-neqacybvqm.cn-hongkong.fcapp.run` | 服务 `panradar-svc` / 函数 `panradar`，custom runtime + zip |
+
+前端只调 FC 的 `/api/*`，后端已加 `Access-Control-Allow-Origin: *` 与 `OPTIONS` 预检，跨域无障碍。
+
+**为什么必须由服务端聚合**：主源 `so.252035.xyz` 的 CORS 是开放的，但 `pansou.app` 无 CORS、
+`misoso` / `hunhepan` 是 http（会被混合内容拦截）——浏览器拉不动，多源聚合只能在 FC 侧完成。
+
+**为什么用香港**：上海桶的公开读会被账号安全策略拦截（`EC 0015-00000501`），
+香港桶创建时带 `public-read` ACL 才生效；FC 迁到同地域省掉跨地域延迟。
 
 ---
 
-## 前置条件
+## 一键部署（推荐，无需 Docker / Serverless Devs）
 
-1. 阿里云账号 + **AccessKey（RAM，授予「函数计算」与「容器镜像服务」权限）**。
-2. 本地安装 [Serverless Devs](https://www.serverless-devs.com/)：
+### 0. 前置条件
+
+1. 阿里云 AccessKey（RAM，需「函数计算」+「OSS」权限），用环境变量传入，**不要写进仓库**：
    ```bash
-   npm i -g @serverless-devs/s
-   s config add        # 填入你的 AccessKey，起个别名（s.yaml 里写 default）
+   export ALIBABA_CLOUD_ACCESS_KEY_ID=...
+   export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
    ```
-3. 本地安装 **Docker**（用于构建镜像）。
-4. 控制台开通 **函数计算 FC** 与 **容器镜像服务 ACR（个人版即可）**，并在 ACR 建好命名空间与仓库 `panradar`。
-5. 先在**云解析 DNS** 给 `pan.ydtgo.top` 加一条 A 记录，指向 FC 分配的公网 IP（部署后控制台可看到，或先部署再看）。
+   Windows PowerShell：
+   ```powershell
+   $env:ALIBABA_CLOUD_ACCESS_KEY_ID='...'
+   $env:ALIBABA_CLOUD_ACCESS_KEY_SECRET='...'
+   ```
+2. Python 依赖（仅部署用，项目本体仍是零依赖）：
+   ```bash
+   pip install alibabacloud_fc_open20210406 alibabacloud_tea_openapi alibabacloud_tea_util oss2
+   ```
 
----
-
-## 部署步骤
-
-### 1. 构建并推送镜像
-
-在仓库根目录执行（把 `<your-namespace>` 换成你的 ACR 命名空间）：
-
-```bash
-docker build -f deploy/fc/Dockerfile -t registry.cn-hangzhou.aliyuncs.com/<your-namespace>/panradar:latest .
-docker push registry.cn-hangzhou.aliyuncs.com/<your-namespace>/panradar:latest
-```
-
-### 2. 改 `deploy/fc/s.yaml` 三处
-
-- `region`：你的 FC 地域（如 `cn-hangzhou`）。
-- `customContainerConfig.image`：第 1 步推送的镜像地址。
-- `customDomains[0].certConfig.certName`：你现有的 SSL 证书名（在证书服务 / FC 控制台里查）。
-
-### 3. 一条命令部署
+### 1. 打包代码
 
 ```bash
-s deploy -t deploy/fc/s.yaml
+python deploy/fc/_build_fc_code.py
 ```
 
-`s` 会创建函数、HTTP 触发器、并绑定 `pan.ydtgo.top`（带上你的证书）。
+产出 `deploy/fc/code.zip`（含 `panradar.py`、`config.json`、`bootstrap` 0755、`web/`）。
+`bootstrap` 的可执行位在 Windows 打 zip 时常丢失，所以函数不依赖它 ——
+`_deploy_fc.py` 用 `customRuntimeConfig.command` 直接拉起 `python3 panradar.py`，绕开这个经典坑。
+
+### 2. 部署 FC 聚合层
+
+```bash
+python _deploy_fc.py
+```
+
+会创建（已存在则更新）service → function → http trigger，并打印：
+
+```
+url_internet: https://panradar-panradar-svc-neqacybvqm.cn-hongkong.fcapp.run
+```
+
+地域在脚本顶部改：`REGION = 'cn-hongkong'`。
+
+### 3. 部署 OSS 静态前端
+
+把第 2 步拿到的地址填进 `_deploy_oss.py` 的 `FC_URL`，然后：
+
+```bash
+python _deploy_oss.py
+```
+
+会建桶（香港）、删掉桶级 `public access block`、开静态网站托管、上传 `web/`，
+并**在上传时把 `config.js` 里的 `API_BASE` 注入成 FC 地址**（同时落到 `config.js` 与 `static/config.js`）。
+
+> 新桶会被账号策略自动加上「阻止公开访问」，不删掉的话匿名访问一律 403：
+> `AccessDenied "You have no right to access this object because of bucket acl"`。
 
 ### 4. 验证
 
 ```bash
-curl -s -o /dev/null -w "首页: %{http_code}\n" https://pan.ydtgo.top/
-curl -s "https://pan.ydtgo.top/api/search?q=%E9%A3%8E%E9%97%B4%E5%BD%B1%E6%9C%88" | head -c 300
+# 后端存活
+curl -s -w "\nHTTP:%{http_code}\n" https://panradar-panradar-svc-neqacybvqm.cn-hongkong.fcapp.run/api/meta
+
+# 端到端搜索（注意参数名是 main，不是 q）
+curl -s "https://panradar-panradar-svc-neqacybvqm.cn-hongkong.fcapp.run/api/search?main=%E9%A3%8E%E9%97%B4%E5%BD%B1%E6%9C%88"
+
+# 前端注入是否正确
+curl -s https://panradar-ydtgo-hk.oss-cn-hongkong.aliyuncs.com/static/config.js
 ```
+
+预期：搜索返回 `ok: true`，「风间影月」能聚类出「慕课网-Java高级工程师（风间影月）」。
 
 ---
 
 ## 注意事项（务必看）
 
-- **出公网访问**：`s.yaml` 已设 `internetAccess: true`，函数才能访问 PanSou 源（`so.252035.xyz` 等）。
-  若你的 FC 建在 VPC 内，需额外给 VPC 配 **NAT 网关** 出网。
-- **缓存持久性**：FC 的 `/code` 只读，缓存已通过环境变量 `PANRADAR_DATA_DIR=/tmp/panradar` 落到可写目录。
-  但**函数实例冷启动会清空 `/tmp`**，所以「再挖一次」的累积缓存只在**同一个 warm 实例**生命周期内有效；
-  跨实例 / 冷启动后缓存重置。对个人低频使用基本无感。若需跨实例持久，可挂 **NAS** 或改用 **OTS**，另行处理。
-- **超时**：多源搜索含重试可能较久，已设 `timeout: 120s`；如仍不够，可在 `s.yaml` 调大（FC 上限 600s）。
-- **单实例并发**：默认单实例串行处理；高并发可上调 `instanceConcurrency`（在 `s.yaml` 加 `instanceConcurrency: 8`）。
+- **首次搜索约 100 秒**：冷启动 + 4 源并发 + 重试，是正常的。FC `timeout: 120s` 刚好兜住，
+  调小会直接超时。前端每秒刷新「已等待 N 秒」，别刷新页面。
+- **API 参数名是 `main`**：`/api/search?main=关键词&author=&deep=1&clouds=quark,baidu&refresh=1`。
+  用 `q` 会拿到 `{"ok": false, "error": "请输入课程名或作者名"}`。
+- **缓存会随实例冷启动清空**：`PANRADAR_DATA_DIR=/tmp/panradar`，`/code` 只读；
+  FC 冷启动会重置 `/tmp`，所以「⟳ 再挖一次」的累积效果只在同一个 warm 实例内有效。
+  要跨实例持久得挂 NAS 或改用 OTS。
+- **出公网必须开**：`internetAccess: true`，否则函数访问不到 PanSou 源。
+- **改了前端必须强刷**：`Ctrl+F5`。浏览器缓存旧 JS 时，服务端已是新版、前端还在跑旧代码。
+- **自定义域名未启用**：`pan.ydtgo.top` 目前没有解析到 OSS/FC，`curl` 返回 `000`。
+  `s.yaml` 里预留了 `customDomains` 配置段（注释状态），有证书时取消注释即可。
 
 ---
 
-## 轻量替代：不用 Docker 的 zip 上传（Custom Runtime）
+## 备选：Serverless Devs（s.yaml）
 
-如果你不想碰 Docker，且确认 FC 自定义运行时基础镜像自带 `python3`，可用 zip 上传：
+不想用 OpenAPI 脚本时，可用 `deploy/fc/s.yaml`（同样是 custom runtime + zip，地域已改为 `cn-hongkong`）：
 
-1. 把 `panradar.py` / `config.json` / `web/` / `deploy/fc/bootstrap` 打成一个包。
-2. `bootstrap` 需 `chmod +x`（FC 以它为入口，监听 `$FC_SERVER_PORT`）。
-3. `s.yaml` 改用：
-   ```yaml
-   runtime: custom
-   customRuntimeConfig:
-     port: 9000
-     command: [bash, bootstrap]
-   ```
-4. 其余（触发器 / 自定义域名 / 证书）同上。
+```bash
+npm i -g @serverless-devs/s
+s config add          # 填入 AccessKey，别名 default
+python deploy/fc/_build_fc_code.py
+s deploy -t deploy/fc/s.yaml
+```
 
-> ⚠️ 自定义运行时基础镜像**默认不含 Python**，需自行确认或补装，故**容器方案更稳**，推荐优先用上面的 Docker 流程。
+> `s.yaml` 里的 `customDomains` 段默认注释，需要 `pan.ydtgo.top` + 已有证书时再打开。
 
----
+### 备选：Docker 自定义容器
 
-## 推荐组合：OSS 静态前端 + FC 聚合层（多源，最轻）
-
-静态走 OSS（和你三个现有站点同套路），多源搜索算力留在 FC（复用上面的 Docker 流程）。
-实测 PanSou 主源 `so.252035.xyz` 的 CORS 是开放的，但其它源（pansou.app 无 CORS、misoso/hunhepan 是 http 会被混合内容拦截）
-**浏览器不能直接跨域拉**，所以「多源聚合」必须由服务端（FC）完成，前端只调 FC 的 `/api/*`。
-这既比纯 ECS 轻，又守住「示例必须搜到」的多源底线。
-
-后端已对 `/api/*` 加了 `Access-Control-Allow-Origin: *` 和 `OPTIONS` 预检支持，OSS 页面跨域调用无障碍。
-
-### 步骤
-
-1. **FC 聚合层**（同上 Docker 流程）：构建/推送镜像、`s deploy -t deploy/fc/s.yaml`。
-   给 FC 也绑一个自定义域名最省事，例如 `api.pan.ydtgo.top`（同一个证书）；
-   或者直接用 FC 默认地址 `https://<uid>.<region>.fcapp.run`。
-2. **OSS 静态前端**：把 `web/` 整个目录上传到 OSS bucket（开静态网站托管），
-   用你现有的 CDN / 证书套路把 `pan.ydtgo.top` 指过来——和你另外两个站点一模一样。
-3. **填 API 地址**：编辑 `web/config.js`，把
-   ```js
-   window.PANRADAR_API_BASE = "";
-   ```
-   改成你的 FC 地址，例如：
-   ```js
-   window.PANRADAR_API_BASE = "https://api.pan.ydtgo.top";
-   ```
-   改完重新上传 `config.js` 到 OSS。**本地直接跑 `panradar.py` 时留空即可（同源）。**
-4. **验证**：浏览器打开 `https://pan.ydtgo.top/` → 搜索 → 网络面板里 `/api/search` 走的是
-   `api.pan.ydtgo.top` 且带 `Access-Control-Allow-Origin` 响应头，结果正常返回。
-
-> 进阶（可选，免跨域）：若你的 CDN 支持路径路由，可把 `pan.ydtgo.top/` 指 OSS、`pan.ydtgo.top/api/*`
-> 指 FC，前端 `API_BASE` 留空（同源），连 CORS 都不需要。默认用上面的跨域方案更省事。
+`Dockerfile` 仍在（`python:3.12-slim`）。但当前线上版本**没有**走容器 —— zip 上传更轻、
+不用维护 ACR 仓库，且 custom runtime 基础镜像自带 python3，够用。容器方案仅作退路保留。

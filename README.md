@@ -278,9 +278,46 @@ docker run -d --name pansou -p 8888:8888 -v pansou-cache:/app/cache \
 pan-radar/
 ├─ panradar.py          # 后端：搜索引擎 + HTTP 服务 + sqlite 缓存
 ├─ web/index.html       # 前端单页（原生 HTML/CSS/JS，无构建）
+├─ web/config.js        # 前端 API 地址（本地留空；部署时注入 FC 地址）
 ├─ config.json          # 数据源与参数（首次运行自动生成）
-└─ data/panradar.db     # 缓存与搜索历史
+├─ data/panradar.db     # 缓存与搜索历史
+└─ deploy/              # 线上部署（OSS 静态前端 + FC 聚合层，见 deploy/fc/README.md）
+   ├─ _deploy_fc.py         # 用 OpenAPI SDK 建/更新 FC 服务、函数、HTTP 触发器
+   ├─ _deploy_oss.py        # 建桶、开静态托管、上传 web/ 并注入 API 地址
+   └─ fc/_build_fc_code.py  # 打 code.zip（含 bootstrap）
 ```
+
+## 线上部署（OSS 静态前端 + FC 聚合层 · 香港）
+
+已经跑通并在线运行的一套，不用 Docker、不用 Serverless Devs：
+
+| 组件 | 地址 |
+| --- | --- |
+| 前端 | https://panradar-ydtgo-hk.oss-cn-hongkong.aliyuncs.com/ |
+| API | `https://panradar-panradar-svc-neqacybvqm.cn-hongkong.fcapp.run` |
+
+架构上前端只调 FC 的 `/api/*`：`pansou.app` 无 CORS、`misoso`/`hunhepan` 是 http 会被混合内容拦截，
+**多源聚合只能由服务端完成**，这部分算力放在 FC；静态页面放 OSS，两者都用香港地域。
+
+完整步骤（凭证、打包、部署、验证、注意事项）见 **[deploy/fc/README.md](deploy/fc/README.md)**，简版：
+
+```bash
+export ALIBABA_CLOUD_ACCESS_KEY_ID=...
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET=...
+pip install alibabacloud_fc_open20210406 alibabacloud_tea_openapi alibabacloud_tea_util oss2
+
+python deploy/fc/_build_fc_code.py   # 打 code.zip
+python _deploy_fc.py                 # 部署 FC，打印公网地址
+# 把地址填进 _deploy_oss.py 的 FC_URL
+python _deploy_oss.py                # 部署 OSS 前端并注入 API 地址
+```
+
+几个线上才体会到的点：
+
+- **首次搜索约 100 秒**（冷启动 + 4 源并发 + 重试），FC `timeout: 120s` 刚好兜住。
+- **接口参数是 `main` 不是 `q`**：`/api/search?main=风间影月`，用错会回 `请输入课程名或作者名`。
+- **缓存随实例冷启动清空**（落在 `/tmp/panradar`），「再挖一次」的累积只在 warm 实例内有效。
+- 改了 `web/` 之后必须 `Ctrl+F5` 强刷，否则前端还在跑旧 JS。
 
 ## 合规提示
 
