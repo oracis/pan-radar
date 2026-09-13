@@ -4,17 +4,23 @@
 
 **OSS 静态前端（香港）+ FC 聚合层（香港）**，这是实测跑通并正在使用的方案：
 
-| 组件 | 地址 | 说明 |
-| --- | --- | --- |
-| 静态前端 | `https://panradar-ydtgo-hk.oss-cn-hongkong.aliyuncs.com/` | 桶 `panradar-ydtgo-hk`，公开读 + 静态网站托管 |
-| 聚合层 | `https://panradar-panradar-svc-neqacybvqm.cn-hongkong.fcapp.run` | 服务 `panradar-svc` / 函数 `panradar`，custom runtime + zip |
+对外统一走自定义域名 **`https://pan.ydtgo.top`**（直接绑在 FC 上，同源，不需要 CORS）。
 
-前端只调 FC 的 `/api/*`，后端已加 `Access-Control-Allow-Origin: *` 与 `OPTIONS` 预检，跨域无障碍。
+| 组件        | 地址                                                               | 说明                                                          |
+| --------- | ---------------------------------------------------------------- | ----------------------------------------------------------- |
+| **对外域名**  | `https://pan.ydtgo.top`                                          | FC 自定义域名；证书是 Let's Encrypt 通配 `*.pan.ydtgo.top`                |
+| 静态前端（备用） | `https://panradar-ydtgo-hk.oss-cn-hongkong.aliyuncs.com/`        | 桶 `panradar-ydtgo-hk`，公开读 + 静态网站托管                           |
+| 聚合层       | `https://panradar-panradar-svc-neqacybvqm.cn-hongkong.fcapp.run` | 服务 `panradar-svc` / 函数 `panradar`，custom runtime + zip      |
 
-**为什么必须由服务端聚合**：主源 `so.252035.xyz` 的 CORS 是开放的，但 `pansou.app` 无 CORS、
+**为什么绑在 FC 而不是 OSS**：FC 的代码包里带了 `web/`，一个域名同时出页面和接口 —— 同源、免 CORS、
+也不用额外开 CDN 或买阿里云证书。OSS 那份保留作备用入口（它的 `config.js` 注入的是 FC 地址）。
+
+**证书自动续期**：Let's Encrypt 只有 90 天，续期脚本见 **[../le/README.md](../le/README.md)**。
+
+**为什么必须由服务端聚合**：主源 `so.252035.xyz` 的 CORS 是开放的，但 `pansou.app` 无 CORS、  
 `misoso` / `hunhepan` 是 http（会被混合内容拦截）——浏览器拉不动，多源聚合只能在 FC 侧完成。
 
-**为什么用香港**：上海桶的公开读会被账号安全策略拦截（`EC 0015-00000501`），
+**为什么用香港**：上海桶的公开读会被账号安全策略拦截（`EC 0015-00000501`），  
 香港桶创建时带 `public-read` ACL 才生效；FC 迁到同地域省掉跨地域延迟。
 
 ---
@@ -44,8 +50,8 @@
 python deploy/fc/_build_fc_code.py
 ```
 
-产出 `deploy/fc/code.zip`（含 `panradar.py`、`config.json`、`bootstrap` 0755、`web/`）。
-`bootstrap` 的可执行位在 Windows 打 zip 时常丢失，所以函数不依赖它 ——
+产出 `deploy/fc/code.zip`（含 `panradar.py`、`config.json`、`bootstrap` 0755、`web/`）。  
+`bootstrap` 的可执行位在 Windows 打 zip 时常丢失，所以函数不依赖它 ——  
 `_deploy_fc.py` 用 `customRuntimeConfig.command` 直接拉起 `python3 panradar.py`，绕开这个经典坑。
 
 ### 2. 部署 FC 聚合层
@@ -70,10 +76,10 @@ url_internet: https://panradar-panradar-svc-neqacybvqm.cn-hongkong.fcapp.run
 python _deploy_oss.py
 ```
 
-会建桶（香港）、删掉桶级 `public access block`、开静态网站托管、上传 `web/`，
+会建桶（香港）、删掉桶级 `public access block`、开静态网站托管、上传 `web/`，  
 并**在上传时把 `config.js` 里的 `API_BASE` 注入成 FC 地址**（同时落到 `config.js` 与 `static/config.js`）。
 
-> 新桶会被账号策略自动加上「阻止公开访问」，不删掉的话匿名访问一律 403：
+> 新桶会被账号策略自动加上「阻止公开访问」，不删掉的话匿名访问一律 403：  
 > `AccessDenied "You have no right to access this object because of bucket acl"`。
 
 ### 4. 验证
@@ -95,23 +101,26 @@ curl -s https://panradar-ydtgo-hk.oss-cn-hongkong.aliyuncs.com/static/config.js
 
 ## 注意事项（务必看）
 
-- **首次搜索约 100 秒**：冷启动 + 4 源并发 + 重试，是正常的。FC `timeout: 120s` 刚好兜住，
+- **首次搜索约 100 秒**：冷启动 + 4 源并发 + 重试，是正常的。FC `timeout: 120s` 刚好兜住，  
   调小会直接超时。前端每秒刷新「已等待 N 秒」，别刷新页面。
-- **API 参数名是 `main`**：`/api/search?main=关键词&author=&deep=1&clouds=quark,baidu&refresh=1`。
+- **API 参数名是 `main`**：`/api/search?main=关键词&author=&deep=1&clouds=quark,baidu&refresh=1`。  
   用 `q` 会拿到 `{"ok": false, "error": "请输入课程名或作者名"}`。
-- **缓存会随实例冷启动清空**：`PANRADAR_DATA_DIR=/tmp/panradar`，`/code` 只读；
-  FC 冷启动会重置 `/tmp`，所以「⟳ 再挖一次」的累积效果只在同一个 warm 实例内有效。
+- **缓存会随实例冷启动清空**：`PANRADAR_DATA_DIR=/tmp/panradar`，`/code` 只读；  
+  FC 冷启动会重置 `/tmp`，所以「⟳ 再挖一次」的累积效果只在同一个 warm 实例内有效。  
   要跨实例持久得挂 NAS 或改用 OTS。
 - **出公网必须开**：`internetAccess: true`，否则函数访问不到 PanSou 源。
 - **改了前端必须强刷**：`Ctrl+F5`。浏览器缓存旧 JS 时，服务端已是新版、前端还在跑旧代码。
-- **自定义域名未启用**：`pan.ydtgo.top` 目前没有解析到 OSS/FC，`curl` 返回 `000`。
-  `s.yaml` 里预留了 `customDomains` 配置段（注释状态），有证书时取消注释即可。
+- **自定义域名已启用**：`pan.ydtgo.top` CNAME 到 `1383348142395592.cn-hongkong.fc.aliyuncs.com`。  
+  顺序不能反 —— **必须先加 CNAME 且解析生效，再调 `CreateCustomDomain`**，
+  否则报 `DomainNameNotResolved`（报错信息里会给出该地域应指向的 endpoint）。
+- **CNAME 生效有延迟**：阿里云 DNS 侧加完立刻可见，但递归 DNS 可能短暂返回 NXDOMAIN，实测 1–2 分钟。
+  判断是不是这个原因：直接 `nslookup -type=CNAME pan.ydtgo.top 223.5.5.5`，能看到 CNAME 就说明已在生效中。
 
 ---
 
 ## 备选：Serverless Devs（s.yaml）
 
-不想用 OpenAPI 脚本时，可用 `deploy/fc/s.yaml`（同样是 custom runtime + zip，地域已改为 `cn-hongkong`）：
+不想用 OpenAPI 脚本时，可用 `deploy/fc/s.yaml`（同样是 custom runtime + zip，地域已改为 `cn-hongkong`）：8
 
 ```bash
 npm i -g @serverless-devs/s
@@ -124,5 +133,5 @@ s deploy -t deploy/fc/s.yaml
 
 ### 备选：Docker 自定义容器
 
-`Dockerfile` 仍在（`python:3.12-slim`）。但当前线上版本**没有**走容器 —— zip 上传更轻、
+`Dockerfile` 仍在（`python:3.12-slim`）。但当前线上版本**没有**走容器 —— zip 上传更轻、  
 不用维护 ACR 仓库，且 custom runtime 基础镜像自带 python3，够用。容器方案仅作退路保留。

@@ -284,7 +284,8 @@ pan-radar/
 └─ deploy/              # 线上部署（OSS 静态前端 + FC 聚合层，见 deploy/fc/README.md）
    ├─ _deploy_fc.py         # 用 OpenAPI SDK 建/更新 FC 服务、函数、HTTP 触发器
    ├─ _deploy_oss.py        # 建桶、开静态托管、上传 web/ 并注入 API 地址
-   └─ fc/_build_fc_code.py  # 打 code.zip（含 bootstrap）
+   ├─ fc/_build_fc_code.py  # 打 code.zip（含 bootstrap）
+   └─ le/renew_cert.py      # Let's Encrypt 证书自动续期 + 推到 FC 自定义域名
 ```
 
 ## 线上部署（OSS 静态前端 + FC 聚合层 · 香港）
@@ -293,11 +294,17 @@ pan-radar/
 
 | 组件 | 地址 |
 | --- | --- |
-| 前端 | https://panradar-ydtgo-hk.oss-cn-hongkong.aliyuncs.com/ |
-| API | `https://panradar-panradar-svc-neqacybvqm.cn-hongkong.fcapp.run` |
+| **对外访问** | https://pan.ydtgo.top |
+| 前端（备用） | https://panradar-ydtgo-hk.oss-cn-hongkong.aliyuncs.com/ |
+| API 直连 | `https://panradar-panradar-svc-neqacybvqm.cn-hongkong.fcapp.run` |
 
-架构上前端只调 FC 的 `/api/*`：`pansou.app` 无 CORS、`misoso`/`hunhepan` 是 http 会被混合内容拦截，
-**多源聚合只能由服务端完成**，这部分算力放在 FC；静态页面放 OSS，两者都用香港地域。
+架构上前端只调 `/api/*`：`pansou.app` 无 CORS、`misoso`/`hunhepan` 是 http 会被混合内容拦截，
+**多源聚合只能由服务端完成**，这部分算力放在 FC。
+
+`pan.ydtgo.top` 直接绑在 FC 上（代码包里带了 `web/`），所以页面和接口同源 —— 不用 CORS、不用开 CDN。
+域名的 HTTPS 证书是 Let's Encrypt 通配符（`*.pan.ydtgo.top`，90 天），
+由 **[deploy/le/renew_cert.py](deploy/le/renew_cert.py)** 自动续期，
+挂 Windows 计划任务每天跑一次即可（剩余 >30 天会自动跳过），配置见 [deploy/le/README.md](deploy/le/README.md)。
 
 完整步骤（凭证、打包、部署、验证、注意事项）见 **[deploy/fc/README.md](deploy/fc/README.md)**，简版：
 
