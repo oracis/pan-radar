@@ -8,6 +8,7 @@
   "max_requests": 16,
   "auto_degrade": true,
   "drop_below": 0.34,
+  "freshness_weight": 45,
   "cloud_priority": [
     "quark",
     "baidu",

@@ -116,6 +116,9 @@ DEFAULT_CONFIG = {
     "auto_degrade": True,
     # 相关度低于此值直接丢弃（LCS 占查询串的比例）。噪声源单字模糊匹配通常 < 0.35
     "drop_below": 0.34,
+    # 新鲜度加分上限。网盘链接存活期短，近期资源更可能还活着。
+    # 45 高于 cloud_bonus(≤18) 但低于标题精确命中(55~80)，只影响同量级之间的先后。
+    "freshness_weight": 45,
     "cloud_priority": ["quark", "baidu", "aliyun", "uc", "xunlei", "tianyi",
                        "mobile", "115", "123", "pikpak", "guangya"],
     "sources": [
@@ -366,6 +369,7 @@ def _query_pansou(source, query, timeout, budget=None):
     data = j.get("data") or {}
     results = data.get("results")
     items = []
+    stamps = []                    # 每条消息的 datetime，用于判定时间可信度
 
     if isinstance(results, list) and results:
         for r in results:
@@ -374,6 +378,7 @@ def _query_pansou(source, query, timeout, budget=None):
             title = strip_html(r.get("title"))
             content = strip_html(r.get("content"))
             channel = r.get("channel") or ""
+            stamps.append(r.get("datetime") or "")
             for lk in (r.get("links") or []):
                 if not isinstance(lk, dict):
                     continue
@@ -411,6 +416,14 @@ def _query_pansou(source, query, timeout, budget=None):
                 "source": it.get("source") or "",
                 "images": it.get("images") or [],
             })
+
+    # 时间可信度：盘盘侠这类 pansou-rust 源给的是入库时间而非发布时间，
+    # 若照用会让整批资源被当成「今天发布」而霸榜。宁可不显示日期，也不显示错的。
+    if items and not _dts_trusted(stamps):
+        log("源 [%s] 的 datetime 疑似入库时间（%d 条挤在 1 小时内），本次不采用其时间"
+            % (source.get("name") or source.get("search_url"), len(stamps)))
+        for i in items:
+            i["dt"] = ""
     return items
 
 
@@ -548,6 +561,54 @@ def _age_days(dt_str):
         return max(0.0, (datetime.now(timezone.utc) - d).total_seconds() / 86400.0)
     except Exception:
         return None
+
+
+def _dts_trusted(stamps):
+    """判断一批 datetime 是「资源发布时间」还是「入库时间」。
+
+    踩过的坑：pansou-rust 系（如盘盘侠 panpanxia）返回的 datetime 是**入库时间**，
+    实测 30 条结果全落在同一秒、精确到纳秒。若把它当发布时间，整批资源都会被
+    判成「今天发布」而霸占前排（还会让「最新优先」排序彻底失真），
+    这比没有时间信息更糟。
+
+    判据：绝大多数时间都挤在最近 1 小时内 => 是批量入库，不是消息发布时间。
+    真实 TG 消息的结果总是横跨很多天，不会 90% 以上都在这一小时。
+    """
+    ages = [_age_days(s) for s in stamps if s]
+    ages = [a for a in ages if a is not None]
+    if len(ages) < 10:                  # 样本太小不下结论
+        return True
+    fresh = sum(1 for a in ages if a < (1.0 / 24))
+    return (fresh / float(len(ages))) < 0.9
+
+
+def _freshness_bonus(age, weight=45.0):
+    """时间新鲜度加分。
+
+    网盘分享链接存活期很短：同一条资源，2 年前的链接大概率已经失效，
+    而「搜到却点进去是死的」正是这个站点最大的体验问题。所以排序上要让
+    新鲜资源占便宜。
+
+    旧权重是 `max(0, 26 - age/12)`，上限 26 分 —— 而 cloud_bonus 最高就有 18 分，
+    结果一条两年前的夸克资源能压过昨天发布的 123 资源，正好和诉求相反。
+    这里把上限提到 45（仍低于标题精确命中的 55~80，不会盖过相关性），
+    曲线前陡后平：一周内差异最大，半年后基本归零。
+    """
+    if age is None:
+        # 时间不可信或缺失：给中性值。不给 0，否则这类源会被系统性压到底部；
+        # 也不给满分，因为我们无法确认它是新的。
+        return weight * 0.27
+    if age <= 3:
+        return weight
+    if age <= 14:
+        return weight * (1.0 - 0.33 * (age - 3) / 11.0)        # 100% -> 67%
+    if age <= 60:
+        return weight * (0.67 - 0.34 * (age - 14) / 46.0)      # 67% -> 33%
+    if age <= 180:
+        return weight * (0.33 - 0.24 * (age - 60) / 120.0)     # 33% -> 9%
+    if age <= 365:
+        return weight * (0.09 - 0.09 * (age - 180) / 185.0)    # 9% -> 0
+    return 0.0
 
 
 def _pick_title(a, b, tokens=None):
@@ -770,7 +831,7 @@ def derive_topics(items, tokens, limit=3):
     return out
 
 
-def score_item(item, query_list, cloud_bonus, tokens=None):
+def score_item(item, query_list, cloud_bonus, tokens=None, fresh_weight=45.0):
     title = (item.get("title") or "")
     hay = (title + " " + (item.get("content") or "")[:150]).lower()
     score = 0.0
@@ -791,8 +852,7 @@ def score_item(item, query_list, cloud_bonus, tokens=None):
     if item.get("images"):
         score += 1
     age = _age_days(item.get("dt"))
-    if age is not None:
-        score += max(0.0, 26.0 - age / 12.0)
+    score += _freshness_bonus(age, fresh_weight)
     if len(title) > 160:
         score -= 6                       # 超长标题通常是乱码合集
     if item.get("size"):
@@ -1140,6 +1200,7 @@ class Engine:
         bonus = {}
         for idx, c in enumerate(self.cfg.get("cloud_priority", [])):
             bonus[c] = max(0, 18 - idx * 2)
+        fresh_weight = float(self.cfg.get("freshness_weight", 45))
 
         merged = {}
         for it in raw:
@@ -1169,7 +1230,7 @@ class Engine:
             it["id"] = hashlib.md5(k.encode("utf-8")).hexdigest()[:12]
             it["cloud_label"] = CLOUDS[it["cloud"]]["label"]
             it["rel"] = round(rel, 2)
-            it["score"] = score_item(it, query_list, bonus, tokens)
+            it["score"] = score_item(it, query_list, bonus, tokens, fresh_weight)
             it["low"] = rel < 0.6
             it["tags"] = _extract_tags(it)
             age = _age_days(it.get("dt"))
