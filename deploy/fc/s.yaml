@@ -18,7 +18,7 @@ services:
       handler: dummy.handler        # 自定义运行时忽略 handler，实际由 bootstrap 拉起
       codeUri: ./code.zip           # 由 _build_fc_code.py 打包（bootstrap 含 755 执行位）
       port: 9000                    # 自定义运行时监听端口（bootstrap 读取 FC_SERVER_PORT，兜底 9000）
-      timeout: 120                  # 多源搜索可能耗时，已留足；上限 600s
+      timeout: 300                  # 兜底：后端自身硬预算 50s，这里只防意外；上限 600s
       memorySize: 512
       environmentVariables:
         PANRADAR_DATA_DIR: /tmp/panradar   # 缓存落可写目录（/code 只读）

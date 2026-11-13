@@ -18,6 +18,9 @@ CODE_ZIP = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'deploy', 'f
 
 config = openapi_models.Config(access_key_id=AK, access_key_secret=SK)
 config.endpoint = 'fc.%s.aliyuncs.com' % REGION
+# SDK 默认 read_timeout 只有 5s；上传 code.zip / 拉代码包时常超时，必须显式放宽
+config.read_timeout = 120000
+config.connect_timeout = 15000
 client = FCClient(config)
 
 def call(fn):
@@ -84,7 +87,7 @@ fn_req = fc_models.CreateFunctionRequest(
     runtime='custom',
     handler='dummy.handler',
     memory_size=512,
-    timeout=120,
+    timeout=300,
     ca_port=9000,
     custom_runtime_config=crc,
     code=fc_models.Code(zip_file=zip_b64),
@@ -94,7 +97,7 @@ fn_req = fc_models.CreateFunctionRequest(
 # 先尝试更新；若服务/函数不存在(404)则创建
 try:
     up = fc_models.UpdateFunctionRequest(
-        runtime='custom', handler='dummy.handler', memory_size=512, timeout=120,
+        runtime='custom', handler='dummy.handler', memory_size=512, timeout=300,
         ca_port=9000,
         custom_runtime_config=crc,
         code=fc_models.Code(zip_file=zip_b64),

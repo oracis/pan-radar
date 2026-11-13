@@ -257,7 +257,7 @@ async function apiGet(url, timeoutMs){
     if (e && e.name === 'AbortError')
       throw new Error('请求超时（超过 ' + Math.round(ms / 1000)
         + ' 秒）。数据源响应较慢，请重试，或点「⟳ 再挖一次」。');
-    throw new Error('无法连接后端服务。请确认 panradar.py 仍在运行，然后刷新页面。');
+    throw new Error('连接被中断：后端未在限定时间内返回（多为上游数据源响应过慢，或服务被网关超时断开）。已自动重试一次；若仍失败请稍后再试或点「重试」。');
   }
   clearTimeout(timer);
 
@@ -276,6 +276,12 @@ async function apiGet(url, timeoutMs){
     throw new Error('接口 404：请求没打到后端。若是 OSS 静态版，请确认 config.js 里的 '
       + 'PANRADAR_API_BASE 指向正确的 FC 地址；若是本地版，请直接用 panradar.py 启动地址'
       + '（默认 http://127.0.0.1:8931/）打开页面，不要用静态预览服务打开。');
+
+  /* 5xx 基本只有一种：FC 函数执行超时被网关杀掉，body 是一句 errorMessage。
+     单独说清楚，别让它落到「搜索失败」这种没有信息量的提示上。 */
+  if (resp.status >= 500)
+    throw new Error('连接异常：后端返回 HTTP ' + resp.status
+      + '（多为函数执行超时）。已自动重试一次；响应片段：' + text.slice(0, 100));
 
   if (!text || !text.trim())
     throw new Error('后端返回了空响应（HTTP ' + resp.status

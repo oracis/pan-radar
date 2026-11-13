@@ -104,29 +104,38 @@ def _norm_cloud(raw):
 RELEVANT_SCORE = 55.0
 
 DEFAULT_CONFIG = {
-    "config_version": 4,
+    # v5：2026-11-13 全网复测后重排数据源。注意 sources[0] 是主源，_tasks() 会
+    # 让它跑全部查询、其余源只跑 1 条，所以主源必须是实测最快最全的那个。
+    "config_version": 5,
     "port": 8931,
     "cache_ttl": 1800,
-    "request_timeout": 35,
+    "request_timeout": 10,
+    "search_budget": 50,
     "max_concurrency": 6,
-    "max_requests": 14,
+    "max_requests": 16,
     "auto_degrade": True,
     # 相关度低于此值直接丢弃（LCS 占查询串的比例）。噪声源单字模糊匹配通常 < 0.35
     "drop_below": 0.34,
     "cloud_priority": ["quark", "baidu", "aliyun", "uc", "xunlei", "tianyi",
                        "mobile", "115", "123", "pikpak", "guangya"],
     "sources": [
-        {"name": "PanSou · so.252035.xyz", "type": "pansou",
-         "search_url": "https://so.252035.xyz/api/search", "enabled": True},
+        {"name": "PanSou · so.qlf.net.cn", "type": "pansou",
+         "search_url": "https://so.qlf.net.cn/api/search", "enabled": True},
+        {"name": "盘盘侠 · panpanxia", "type": "pansou",
+         "search_url": "https://www.panpanxia.com/api/search", "enabled": True},
+        # 以下 4 个 2026-11-13 实测已失效，保留配置便于日后恢复：
+        # pansou.app 503 / 官方站搜索挂起 / 混合盘改付费密钥 / Misoso DNS 失败
         {"name": "PanSou · pansou.app", "type": "pansou",
-         "search_url": "https://pansou.app/api/search", "enabled": True},
+         "search_url": "https://pansou.app/api/search", "enabled": False},
+        {"name": "PanSou · so.252035.xyz", "type": "pansou",
+         "search_url": "https://so.252035.xyz/api/search", "enabled": False},
         {"name": "混合盘搜索", "type": "disksearch_slim",
          "search_url": "https://hunhepan.com/open/search/disk",
-         "referer": "https://hunhepan.com/search", "pages": 3, "enabled": True},
+         "referer": "https://hunhepan.com/search", "pages": 2, "enabled": False},
         {"name": "Misoso 夸克搜索", "type": "disksearch",
          "search_url": "https://www.misoso.cc/v1/search/disk",
          "referer": "https://www.misoso.cc/search",
-         "origin": "https://www.misoso.cc", "enabled": True},
+         "origin": "https://www.misoso.cc", "enabled": False},
         {"name": "自建 PanSou (Docker)", "type": "pansou",
          "search_url": "http://127.0.0.1:8888/api/search", "enabled": False},
     ],
@@ -194,17 +203,33 @@ _OPENER.addheaders = [
 ]
 
 
-def _do(req, timeout, retries=2):
-    """带重试 / 退避的请求。每次重试换一次连接，规避偶发 403。"""
+def _do(req, timeout, retries=2, budget=None):
+    """带重试 / 退避的请求。每次重试换一次连接，规避偶发 403。
+
+    budget 是「含全部重试」的总耗时上限（秒）。FC 函数有硬超时（线上 120s），
+    一个挂死的上游若按 timeout×(retries+1) 重试，单次调用就能拖过 100s+，
+    再叠加分词降级那一轮足以把整个函数拖到超时被杀 —— 浏览器只看到连接断开，
+    报「无法连接后端服务」。这里用单调时钟压住每次尝试的 socket 超时和退避，
+    超预算立即放弃，保证上层能在硬预算内收尾并回一个正常 JSON。
+    """
+    total = float(budget) if budget and budget > 0 else timeout * (retries + 1)
+    deadline = time.monotonic() + total
     last = None
     for attempt in range(retries + 1):
+        left = deadline - time.monotonic()
+        if left <= 0:
+            break
+        per = max(1.0, min(float(timeout), left))
         try:
-            with _OPENER.open(req, timeout=timeout) as r:
+            with _OPENER.open(req, timeout=per) as r:
                 return json.loads(r.read().decode("utf-8", "replace"))
         except urllib.error.HTTPError as e:
             last = "HTTP %s" % e.code
             if e.code in (400, 401, 403, 414, 500, 502, 503):
-                time.sleep(1.2 * (attempt + 1))
+                nap = 1.2 * (attempt + 1)
+                if deadline - time.monotonic() <= nap:
+                    break
+                time.sleep(nap)
                 continue
             if e.code == 429:
                 # 限流不重试：对端已经记账，退避再打只会把这台机器钉得更死，
@@ -214,20 +239,23 @@ def _do(req, timeout, retries=2):
             break
         except Exception as e:
             last = "%s: %s" % (type(e).__name__, e)
-            time.sleep(0.8 * (attempt + 1))
-    raise RuntimeError(last or "unknown error")
+            nap = 0.8 * (attempt + 1)
+            if deadline - time.monotonic() <= nap:
+                break
+            time.sleep(nap)
+    raise RuntimeError(last or "请求超时（%ss 预算用尽）" % int(total))
 
 
-def http_json(url, timeout=60, retries=2):
-    return _do(urllib.request.Request(url), timeout, retries)
+def http_json(url, timeout=60, retries=2, budget=None):
+    return _do(urllib.request.Request(url), timeout, retries, budget)
 
 
-def http_post_json(url, payload, headers=None, timeout=60, retries=2):
+def http_post_json(url, payload, headers=None, timeout=60, retries=2, budget=None):
     body = json.dumps(payload).encode("utf-8")
     h = {"Content-Type": "application/json"}
     h.update(headers or {})
     return _do(urllib.request.Request(url, data=body, headers=h, method="POST"),
-               timeout, retries)
+               timeout, retries, budget)
 
 
 # --------------------------------------------------------------------------- #
@@ -311,18 +339,18 @@ def strip_html(s):
     return re.sub(r"\s+", " ", s).strip()
 
 
-def query_source(source, query, timeout):
+def query_source(source, query, timeout, budget=None):
     stype = (source.get("type") or "pansou").lower()
     if stype == "pansou":
-        return _query_pansou(source, query, timeout)
+        return _query_pansou(source, query, timeout, budget)
     if stype == "disksearch":
-        return _query_disksearch(source, query, timeout)
+        return _query_disksearch(source, query, timeout, budget)
     if stype == "disksearch_slim":
-        return _query_disksearch_slim(source, query, timeout)
+        return _query_disksearch_slim(source, query, timeout, budget)
     raise RuntimeError("未知数据源类型: %s" % stype)
 
 
-def _query_pansou(source, query, timeout):
+def _query_pansou(source, query, timeout, budget=None):
     """PanSou 协议：GET /api/search?kw=&res=all&src=all
 
     ⚠ 千万不要用 res=merge。实测同一个关键词：res=all 返回 324 条原始结果
@@ -332,7 +360,7 @@ def _query_pansou(source, query, timeout):
     """
     url = source["search_url"] + "?" + urllib.parse.urlencode(
         {"kw": query, "res": "all", "src": "all"}, encoding="utf-8")
-    j = http_json(url, timeout=timeout)
+    j = http_json(url, timeout=timeout, budget=budget)
     if j.get("code") not in (0, None) and not j.get("data"):
         raise RuntimeError(j.get("message") or "源返回异常")
     data = j.get("data") or {}
@@ -353,7 +381,8 @@ def _query_pansou(source, query, timeout):
                 if not u:
                     continue
                 items.append({
-                    "cloud": _norm_cloud(lk.get("type")),
+                    # PanSou 用 type；pansou-rust（盘盘侠）用 disk_type，两者都吃
+                    "cloud": _norm_cloud(lk.get("type") or lk.get("disk_type")),
                     "url": u,
                     "pwd": (lk.get("password") or "").strip(),
                     "title": title,
@@ -391,7 +420,7 @@ _DISK_TYPE_MAP = {"BDY": "baidu", "ALY": "aliyun", "ALYUN": "aliyun", "QUARK": "
                   "XUNLEI": "xunlei", "123PAN": "123", "PIKPAK": "pikpak"}
 
 
-def _query_disksearch(source, query, timeout):
+def _query_disksearch(source, query, timeout, budget=None):
     """misoso 系：POST 完整参数体，返回 data.list[]。"""
     headers = {"Referer": source.get("referer") or source["search_url"]}
     if source.get("origin"):
@@ -400,7 +429,7 @@ def _query_disksearch(source, query, timeout):
         "page": 1, "q": query, "user": "", "exact": False, "format": [],
         "share_time": "", "size": 30, "type": "", "exclude_user": [],
         "adv_params": {"wechat_pwd": "", "platform": "pc"},
-    }, headers=headers, timeout=timeout)
+    }, headers=headers, timeout=timeout, budget=budget)
     code = j.get("code")
     if code == 417:          # 该站业务码：没有搜索结果，不算错误
         return []
@@ -410,13 +439,16 @@ def _query_disksearch(source, query, timeout):
     return _disk_items(data.get("list") or [], source)
 
 
-def _query_disksearch_slim(source, query, timeout):
+def _query_disksearch_slim(source, query, timeout, budget=None):
     """hunhepan 系：只吃 {q,page,size} 三个字段（多传就报「参数错误」）。
 
     该接口忽略 size，每页固定返回 10 条，必须翻页才拿得到更多。
     实测 total 可达 300，翻 3 页约 30 条、命中率可观。
     """
     pages = max(1, min(int(source.get("pages", 3)), 8))
+    # 多页请求共享整次调用的预算：每页各按自己的 deadline 重试会累加成超时
+    per_budget = max(2.0, (float(budget) if budget and budget > 0
+                           else timeout * 3) / pages)
     referer = source.get("referer") or source["search_url"]
     netloc = urllib.parse.urlparse(source["search_url"]).netloc
     headers = {"Referer": referer, "Origin": source.get("origin") or
@@ -426,7 +458,7 @@ def _query_disksearch_slim(source, query, timeout):
         try:
             j = http_post_json(source["search_url"],
                                {"q": query, "page": page, "size": 30},
-                               headers=headers, timeout=timeout)
+                               headers=headers, timeout=timeout, budget=per_budget)
         except Exception:
             if page == 1:
                 raise
@@ -1025,7 +1057,15 @@ class Engine:
         return tasks[:cap]
 
     # ---- 并发执行：命中缓存直接用，未命中才发请求 ----
-    def _fanout(self, tasks, use_cache, timeout, force=False):
+    def _fanout(self, tasks, use_cache, timeout, force=False, budget=None):
+        """单次扇出的墙上时间硬上限 = budget 秒。
+
+        ⚠ 不要用 `with ThreadPoolExecutor(...)`：它的 __exit__ 是 shutdown(wait=True)，
+        即使 as_completed 已经超时返回，也会一直等到挂死的上游请求（含 2 次重试）
+        全部结束，超时形同虚设。两轮扇出叠起来轻松超过 FC 的 120s 硬超时，
+        函数被杀、连接断开，前端只看到「无法连接后端服务」。
+        这里改成显式 shutdown(wait=False)，到点立刻带已有结果返回。
+        """
         raw, status, pending = [], {}, []
         ttl = 0 if not use_cache else int(self.cfg.get("cache_ttl", 1800))
         for src, q in tasks:
@@ -1039,47 +1079,60 @@ class Engine:
                 pending.append((src, q, key))
         if pending:
             workers = max(1, min(int(self.cfg.get("max_concurrency", 6)), len(pending)))
-            # 单源可容忍 timeout 秒，但整体设一个更紧的上限，避免一个源挂起拖死整次搜索
-            deadline = min(timeout, 30) + 5
-            with cf.ThreadPoolExecutor(max_workers=workers) as ex:
-                futs = {ex.submit(query_source, s, q, timeout): (s, q, k)
-                        for s, q, k in pending}
-                done = set()
-                try:
-                    for fut in cf.as_completed(futs, timeout=deadline):
-                        src, q, key = futs[fut]
-                        done.add(fut)
-                        st = status.setdefault(src["name"],
-                                               {"ok": True, "items": 0, "cached": False})
-                        try:
-                            items = fut.result()
-                            # 入库前先按本条查询做一次宽松过滤：上游的 TG 频道
-                            # 有时会涌出 3000+ 条只沾一个字的模糊匹配，不过滤
-                            # 会把缓存撑爆，也会拖慢后续所有合并
-                            items = [i for i in items if relevance(i, [q]) >= 0.25]
-                            if use_cache:
-                                items = self.store.merge_cache(key, items)   # 并集累积
-                            raw.extend(items)
-                            st["items"] += len(items)
-                            st["ok"] = True
-                            st.pop("error", None)
-                        except Exception as e:
-                            st["ok"] = False
-                            st["error"] = str(e)[:160]
-                except cf.TimeoutError:
-                    pass
-                for fut, (src, q, key) in futs.items():
-                    if fut in done or fut.done():
-                        continue
+            wall = float(budget) if budget and budget > 0 else min(timeout, 30) + 5
+            wall = max(4.0, min(wall, 45.0))
+            # 留 3 秒给合并 / 序列化；每个上游请求（含重试）也不得超过这个数
+            per_budget = max(2.0, wall - 3.0)
+            ex = cf.ThreadPoolExecutor(max_workers=workers)
+            futs, done = {}, set()
+
+            def collect(fut, timed_out=False):
+                src, q, key = futs[fut]
+                st = status.setdefault(src["name"],
+                                       {"ok": True, "items": 0, "cached": False})
+                if timed_out:
                     fut.cancel()
-                    st = status.setdefault(src["name"], {"ok": True, "items": 0})
                     if st.get("items", 0) > 0:
                         # 已经拿到部分结果就不要标记成失败，否则界面会误导用户
                         st["ok"] = True
-                        st["error"] = "部分查询超时（%ds）" % deadline
+                        st["error"] = "部分查询超时（%ds）" % int(wall)
                     else:
                         st["ok"] = False
-                        st["error"] = "超时（%ds 无响应）" % deadline
+                        st["error"] = "超时（%ds 无响应）" % int(wall)
+                    return
+                try:
+                    items = fut.result()
+                    # 入库前先按本条查询做一次宽松过滤：上游的 TG 频道
+                    # 有时会涌出 3000+ 条只沾一个字的模糊匹配，不过滤
+                    # 会把缓存撑爆，也会拖慢后续所有合并
+                    items = [i for i in items if relevance(i, [q]) >= 0.25]
+                    if use_cache:
+                        items = self.store.merge_cache(key, items)   # 并集累积
+                    raw.extend(items)
+                    st["items"] += len(items)
+                    st["ok"] = True
+                    st.pop("error", None)
+                except Exception as e:
+                    st["ok"] = False
+                    st["error"] = str(e)[:160]
+
+            try:
+                futs = {ex.submit(query_source, s, q, timeout, per_budget): (s, q, k)
+                        for s, q, k in pending}
+                for fut in cf.as_completed(futs, timeout=wall):
+                    done.add(fut)
+                    collect(fut)
+            except cf.TimeoutError:
+                pass
+            finally:
+                # 已跑完但没轮到处理的 future 也要收结果；没跑完的直接放弃
+                for fut in futs:
+                    if fut not in done:
+                        collect(fut, timed_out=not fut.done())
+                try:
+                    ex.shutdown(wait=False, cancel_futures=True)
+                except TypeError:          # Python < 3.9 没有 cancel_futures
+                    ex.shutdown(wait=False)
         return raw, status
 
     # ---- 归一化 -> 去重 -> 相关度过滤 -> 打分 -> 分组 ----
@@ -1153,6 +1206,12 @@ class Engine:
     def search(self, main, author, deep=False, clouds=None, use_cache=True,
                sort="relevance", limit=400, refresh=False):
         t0 = time.time()
+        # 整次搜索（含分词降级那一轮）的硬预算，必须显著小于 FC 函数超时。
+        # 上游全挂时也要在时间片内带着已有结果 / 明确的源状态正常回 JSON，
+        # 绝不能让请求拖到被网关掐断 —— 那才是「无法连接后端服务」的真正来源。
+        budget_total = max(10.0, min(float(self.cfg.get("search_budget", 50)), 90.0))
+        started = time.monotonic()
+        left = lambda: budget_total - (time.monotonic() - started)
         phrases = build_queries(main, author, deep=deep)
         if not phrases:
             return {"ok": False, "error": "请输入课程名或作者名", "items": [],
@@ -1193,7 +1252,8 @@ class Engine:
         cache_only = True
         # refresh（界面上的「再挖一次」）不吃缓存，把新一批结果并进缓存，越挖越全
         raw, status = self._fanout(
-            self._tasks(sources, phrases, cap), use_cache, timeout, force=bool(refresh))
+            self._tasks(sources, phrases, cap), use_cache, timeout,
+            force=bool(refresh), budget=min(left(), 16.0))
         if refresh:
             cache_only = False
         for st in status.values():
@@ -1205,13 +1265,13 @@ class Engine:
 
         # 「相关」结果为 0 才降级，避免被模糊匹配源的噪声挡住
         degraded, token_list = False, []
-        if relevant == 0 and degrade_on:
+        if relevant == 0 and degrade_on and left() > 8:
             token_list = [t for t in token_queries(main, author) if t not in used]
             if token_list:
                 degraded = True
                 raw2, st2 = self._fanout(
                     self._tasks(sources, token_list, cap, extra_per_source=3),
-                    use_cache, timeout)
+                    use_cache, timeout, budget=min(left(), 14.0))
                 for name, st in st2.items():
                     cur = status.setdefault(name, {"ok": True, "items": 0})
                     cur["items"] += st.get("items", 0)

@@ -1,10 +1,11 @@
 {
-  "config_version": 4,
+  "config_version": 5,
   "port": 8931,
   "cache_ttl": 1800,
-  "request_timeout": 45,
+  "request_timeout": 10,
+  "search_budget": 50,
   "max_concurrency": 6,
-  "max_requests": 14,
+  "max_requests": 16,
   "auto_degrade": true,
   "drop_below": 0.34,
   "cloud_priority": [
@@ -22,16 +23,32 @@
   ],
   "sources": [
     {
-      "name": "PanSou · so.252035.xyz",
+      "name": "PanSou · so.qlf.net.cn",
       "type": "pansou",
-      "search_url": "https://so.252035.xyz/api/search",
-      "enabled": true
+      "search_url": "https://so.qlf.net.cn/api/search",
+      "enabled": true,
+      "note": "2026-11-13 实测可用：87 插件 / 127 TG 频道，0.3s 返回，主源"
+    },
+    {
+      "name": "盘盘侠 · panpanxia",
+      "type": "pansou",
+      "search_url": "https://www.panpanxia.com/api/search",
+      "enabled": true,
+      "note": "独立 meilisearch 索引，与 PanSou 结果零重合；冷门词可能 0 条"
     },
     {
       "name": "PanSou · pansou.app",
       "type": "pansou",
       "search_url": "https://pansou.app/api/search",
-      "enabled": true
+      "enabled": false,
+      "note": "待恢复：2026-11-13 实测 Cloudflare 1102/503 + 读超时，恢复后把 enabled 改回 true"
+    },
+    {
+      "name": "PanSou · so.252035.xyz",
+      "type": "pansou",
+      "search_url": "https://so.252035.xyz/api/search",
+      "enabled": false,
+      "note": "停用：官方站 health 正常但 /api/search 长期 14s+ 无响应"
     },
     {
       "name": "混合盘搜索",
@@ -39,7 +56,8 @@
       "search_url": "https://hunhepan.com/open/search/disk",
       "referer": "https://hunhepan.com/search",
       "pages": 2,
-      "enabled": true
+      "enabled": false,
+      "note": "停用：接口改为付费 API 密钥，返回 code=0 要求购买"
     },
     {
       "name": "Misoso 夸克搜索",
@@ -47,7 +65,8 @@
       "search_url": "https://www.misoso.cc/v1/search/disk",
       "referer": "https://www.misoso.cc/search",
       "origin": "https://www.misoso.cc",
-      "enabled": true
+      "enabled": false,
+      "note": "停用：域名 DNS 解析失败"
     },
     {
       "name": "自建 PanSou (Docker)",
